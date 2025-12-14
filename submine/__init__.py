@@ -7,7 +7,7 @@ from .registry import available_algorithms
 # (you can add more as you implement them)
 from .algorithms import gspan  # noqa: F401
 # from .algorithms import grami  # noqa: F401
-# from .algorithms import sopagrami  # noqa: F401
+from .algorithms import sopagrami  # noqa: F401
 # ...
 
 def get_mining_algorithm(name: str):

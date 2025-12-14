@@ -32,10 +32,10 @@ class GSpanMiner(SubgraphMiner):
         self.max_vertices = max_vertices
         self.visualize = visualize
         self.write_out = write_out
-    
+        
         try:
-            from  gSpan.gspan_mining.config import parser  # type: ignore
-            from  gSpan.gspan_mining.main import main as gspan_main  # type: ignore
+            from  ..thirdparty.gspan_mining.config import parser  # type: ignore
+            from  ..thirdparty.gspan_mining.main import main as gspan_main  # type: ignore
         except ImportError as e:
             raise ImportError(
                 "GSpanMiner requires the 'gspan-ming' package.\n"
@@ -46,6 +46,7 @@ class GSpanMiner(SubgraphMiner):
         self._gspan_main = gspan_main
 
     def mine(self, graphs: List[Graph], min_support: Optional[int] = None, **kwargs) -> MiningResult:
+        
         support = int(min_support if min_support is not None else self.min_support)
 
         with tempfile.TemporaryDirectory() as tmpdir:

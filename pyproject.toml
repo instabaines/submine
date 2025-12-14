@@ -1,1 +1,19 @@
-gspan = ["gspan_mining>=x.y.z"]
+[build-system]
+requires = ["scikit-build-core>=0.5", "cmake>=3.15", "ninja"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "submine"
+version = "0.1.0"
+description = "Unified subgraph mining library"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Ridwan Amure" }]
+dependencies = ["numpy", "pandas", "networkx"]
+
+[tool.scikit-build]
+wheel.packages = ["submine"]
+wheel.install-dir = ""
+sdist.include = ["submine/**", "pyproject.toml", "CMakeLists.txt", "MANIFEST.in"]
+
+
