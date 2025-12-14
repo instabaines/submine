@@ -18,7 +18,6 @@ from .base import SubgraphMiner  # noqa: F401
 # Import algorithm modules so they can register themselves when this
 # package is imported. Additional algorithms can be added here.
 from .gspan import GSpanMiner  # noqa: F401
-from .grami import GraMiMiner  # noqa: F401
 from .sopagrami import SoPaGraMiMiner  # noqa: F401
 
-__all__ = ["SubgraphMiner", "GSpanMiner", "GraMiMiner", "SoPaGraMiMiner"]
+__all__ = ["SubgraphMiner", "GSpanMiner", "SoPaGraMiMiner"]

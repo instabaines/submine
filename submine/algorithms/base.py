@@ -6,7 +6,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional
 
-from ..registry import available_algorithms   # <-- IMPORTANT
+
+from ..registry import available_algorithms   
 from ..core.graph import Graph
 from ..core.result import MiningResult
 from ..utils.logging import get_logger

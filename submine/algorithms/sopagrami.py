@@ -11,7 +11,7 @@ from ..core.graph import Graph
 from ..core.result import MiningResult, SubgraphPattern
 from ..io.sopagrami import write_lg
 
-from . import sopagrami_cpp  # the pybind11 module we built
+from . import sopagrami_cpp  
 
 
 @register
@@ -40,12 +40,19 @@ class SoPaGraMiMiner(SubgraphMiner):
         self.num_threads = num_threads
         self.compute_full_support = compute_full_support
 
+    def check_availability(self):
+        try:
+            from . import sopagrami_cpp
+        except ImportError as e:
+            raise RuntimeError("SoPaGraMi backend not available") from e
+
     def mine(
         self,
         graphs: Iterable[Graph],
         min_support: Optional[int] = None,
         **kwargs,
     ) -> MiningResult:
+        self.check_availability()
         # SoPaGraMi expects a single graph
         graphs_list = list(graphs)
         if len(graphs_list) != 1:
