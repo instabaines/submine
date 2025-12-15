@@ -26,9 +26,13 @@ def _normalize_graph_source(source: GraphSourceLike) -> Iterable[Graph]:
     if isinstance(source, (str, Path)):
         path = Path(source)
         # decide by extension or user config
-        if path.suffix == ".gspan" or".data" in source:
+        if path.suffix == ".gspan" or ".data" in str(source):
             from .io.gspan import read_gspan_dataset
             return read_gspan_dataset(path)
+        elif path.suffix.lower() == ".lg":
+            # Load a single lg graph (streaming reader)
+            from .io.sopagrami import read_lg
+            return [read_lg(path)]
         elif path.suffix in {".edgelist", ".txt"}:
             from .io.common import read_edgelist_dataset
             return read_edgelist_dataset(path)
@@ -61,7 +65,17 @@ def mine_subgraphs(
       - an iterable of Graphs
       - a path to a graph dataset on disk
     """
-    graphs = _normalize_graph_source(data)
     AlgoCls = get_algorithm(algorithm)
     miner = AlgoCls(**algo_params)
+
+    # Special-case: if the user supplies a native .lg file for SoPaGraMi,
+    # pass it through directly (no re-parse, no re-write).
+    if isinstance(data, (str, Path)):
+        path = Path(data)
+        if path.suffix.lower() == ".lg" and getattr(miner, "name", "").lower() == "sopagrami":
+            if not hasattr(miner, "mine_lg"):
+                raise RuntimeError("SoPaGraMi miner does not expose mine_lg(); update the wrapper.")
+            return miner.mine_lg(path, min_support=min_support)
+
+    graphs = _normalize_graph_source(data)
     return miner.mine(graphs, min_support=min_support)

@@ -18,11 +18,39 @@ __all__ = ["SubgraphMiner", "register"]
 class SubgraphMiner(ABC):
     name: str = "base"
 
+    # Weight handling
+    # -------------
+    # Most classical subgraph miners operate on *labeled* (unweighted) graphs.
+    # We therefore make weight support explicit. If the input graph contains
+    # weights and the algorithm does not support them, the weight_strategy
+    # controls what happens.
+    supports_weighted: bool = False
+    weight_strategy: str = "ignore"  # one of: ignore | reject
+
     def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
         self.logger = get_logger(self.__class__.__name__)
         if self.verbose:
             self.logger.setLevel("DEBUG")
+
+    def _handle_weights(self, graphs: Iterable[Graph]) -> Iterable[Graph]:
+        """Apply the configured weight strategy to input graphs.
+
+        - If the algorithm supports weights: pass through.
+        - If it does not and the graph is weighted:
+            * ignore: drop weights (treat as unweighted)
+            * reject: raise
+        """
+        for g in graphs:
+            if getattr(g, "is_weighted", False) and g.is_weighted and not self.supports_weighted:
+                if self.weight_strategy == "reject":
+                    raise ValueError(
+                        f"Algorithm '{self.name}' does not support weighted graphs; "
+                        "set weight_strategy='ignore' to drop weights explicitly."
+                    )
+                # ignore: drop weights
+                g.edge_weights = None
+            yield g
 
     @abstractmethod
     def mine(self, graphs: Iterable[Graph], min_support: int, **kwargs) -> MiningResult:

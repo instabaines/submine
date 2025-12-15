@@ -46,7 +46,7 @@ class GSpanMiner(SubgraphMiner):
         self._gspan_main = gspan_main
 
     def mine(self, graphs: List[Graph], min_support: Optional[int] = None, **kwargs) -> MiningResult:
-        
+        graphs = list(self._handle_weights(graphs))
         support = int(min_support if min_support is not None else self.min_support)
 
         with tempfile.TemporaryDirectory() as tmpdir:

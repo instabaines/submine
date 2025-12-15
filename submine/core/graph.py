@@ -1,174 +1,173 @@
-"""Graph data structure used throughout the submine library.
+"""Core graph container used throughout *submine*.
 
-The :class:`Graph` class represents a simple undirected graph where each
-vertex and edge can carry an optional label. It is intentionally
-lightweight and does not depend on external libraries such as
-`networkx`, though conversion utilities are provided if networkx is
-available. Internally the graph is stored as an adjacency dictionary
-mapping node identifiers to a list of neighbouring nodes with edge
-labels.
+Design goals
+------------
+1) Keep a lightweight, dependency-free representation.
+2) Preserve the existing public surface used by wrappers:
+   - ``Graph.nodes`` : list of node ids
+   - ``Graph.edges`` : list of (u, v)
+   - ``Graph.node_labels`` : dict[node_id] -> label (optional)
+   - ``Graph.edge_labels`` : dict[(u, v)] -> label (optional)
+3) Add *optional* edge weights without breaking unweighted algorithms.
 
-You can add nodes and edges explicitly using :meth:`add_node` and
-:meth:`add_edge`. The graph is undirected by default – adding an edge
-between ``u`` and ``v`` automatically registers the symmetric edge.
-
-Example usage::
-
-    >>> from submine.core.graph import Graph
-    >>> g = Graph()
-    >>> g.add_node(1, label='C')
-    >>> g.add_node(2, label='O')
-    >>> g.add_edge(1, 2, label='single')
-    >>> list(g.iter_edges())
-    [(1, 2, 'single')]
-
+Weights are stored as ``Graph.edge_weights`` (dict[(u, v)] -> float). If a
+weight is missing for an edge, it is treated as 1.0.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Hashable, Iterable, Iterator, List, Optional, Protocol, Tuple
 
-
-from typing import Iterable, Protocol
 
 class GraphSource(Protocol):
     """Anything that can yield Graph objects."""
-    def __iter__(self) -> Iterable[Graph]:
+
+    def __iter__(self) -> Iterable["Graph"]:  # pragma: no cover
         ...
+
 
 @dataclass(eq=True, frozen=True)
 class Node:
-    """Internal representation of a graph node.
-
-    Parameters
-    ----------
     id: Any
-        Unique identifier for the node.
-    label: Optional[str]
-        An optional label attached to the node. Labels are used by
-        certain algorithms to distinguish node types.
-    data: Dict[str, Any]
-        Arbitrary metadata associated with this node.
-    """
-
-    id: Any
-    label: Optional[str] = None
+    label: Optional[Any] = None
     data: Dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        # Ensure data is a dict even if None was provided.
         if self.data is None:
             object.__setattr__(self, "data", {})
 
 
 class Graph:
-    """A simple undirected labelled graph.
+    """Lightweight labeled (optionally weighted) undirected graph."""
 
-    Nodes are indexed by unique identifiers (any hashable type). Each
-    node can optionally carry a label and arbitrary metadata. Edges
-    connect unordered pairs of nodes and can also carry a label. Self
-    loops are not supported.
-    """
+    def __init__(
+        self,
+        nodes: Optional[Iterable[Hashable]] = None,
+        edges: Optional[Iterable[Tuple[Hashable, Hashable]]] = None,
+        node_labels: Optional[Dict[Hashable, Any]] = None,
+        edge_labels: Optional[Dict[Tuple[Hashable, Hashable], Any]] = None,
+        edge_weights: Optional[Dict[Tuple[Hashable, Hashable], float]] = None,
+    ) -> None:
+        self.nodes: List[Hashable] = list(nodes) if nodes is not None else []
+        self.edges: List[Tuple[Hashable, Hashable]] = list(edges) if edges is not None else []
+        self.node_labels: Optional[Dict[Hashable, Any]] = node_labels
+        self.edge_labels: Optional[Dict[Tuple[Hashable, Hashable], Any]] = edge_labels
+        self.edge_weights: Optional[Dict[Tuple[Hashable, Hashable], float]] = edge_weights
 
-    def __init__(self, nodes, edges, node_labels=None, edge_labels=None):
-        # nodes: iterable of node ids (can be any hashable)
-        # edges: iterable of (u, v) or (u, v, label)
-        self.nodes = list(nodes)
-        self.edges = list(edges)
-        self.node_labels = node_labels  # dict[node_id] -> label (int/str), or None
-        self.edge_labels = edge_labels  # dict[(u, v)] -> label (int/str), or None
+        # For incremental construction APIs.
+        self._nodes: Dict[Hashable, Node] = {}
+        self._adj: Dict[Hashable, List[Tuple[Hashable, Optional[Any], float]]] = {}
 
-    def add_node(self, node_id: Any, label: Optional[str] = None, **data: Any) -> Node:
-        """Add a new node to the graph.
+        if self.nodes or self.edges:
+            # Seed internal indices for add_node/add_edge compatibility.
+            for nid in self.nodes:
+                lbl = self.node_labels.get(nid) if self.node_labels else None
+                self._nodes[nid] = Node(nid, lbl, {})
+                self._adj.setdefault(nid, [])
+            for (u, v) in self.edges:
+                lbl = None
+                if self.edge_labels is not None:
+                    lbl = self.edge_labels.get((u, v), self.edge_labels.get((v, u)))
+                w = 1.0
+                if self.edge_weights is not None:
+                    w = float(self.edge_weights.get((u, v), self.edge_weights.get((v, u), 1.0)))
+                self._adj.setdefault(u, []).append((v, lbl, w))
+                self._adj.setdefault(v, []).append((u, lbl, w))
 
-        If a node with the given identifier already exists its label and
-        data will be updated with the provided values. Extra keyword
-        arguments are stored in the node's data dictionary.
+    @property
+    def is_weighted(self) -> bool:
+        if not self.edge_weights:
+            return False
+        return any(float(w) != 1.0 for w in self.edge_weights.values())
 
-        Parameters
-        ----------
-        node_id: Any
-            Unique identifier for the node.
-        label: Optional[str], default None
-            A label for the node (e.g., atom type).
-        **data: dict
-            Arbitrary metadata to attach to the node.
-
-        Returns
-        -------
-        Node
-            The created or updated node.
-        """
+    def add_node(self, node_id: Hashable, label: Optional[Any] = None, **data: Any) -> Node:
         if node_id in self._nodes:
-            node = self._nodes[node_id]
-            # Update existing node
-            if label is not None:
-                node = Node(node.id, label=label, data=node.data.copy())
-            if data:
-                node.data.update(data)
-            self._nodes[node_id] = node
-            return node
-        # New node
-        node = Node(node_id, label=label, data=data or None)
-        self._nodes[node_id] = node
+            n = self._nodes[node_id]
+            lbl = n.label if label is None else label
+            merged = dict(n.data)
+            merged.update(data)
+            n2 = Node(node_id, lbl, merged)
+            self._nodes[node_id] = n2
+            if node_id not in self.nodes:
+                self.nodes.append(node_id)
+            if self.node_labels is not None:
+                self.node_labels[node_id] = lbl
+            self._adj.setdefault(node_id, [])
+            return n2
+
+        n = Node(node_id, label, data or None)
+        self._nodes[node_id] = n
         self._adj.setdefault(node_id, [])
-        return node
+        if node_id not in self.nodes:
+            self.nodes.append(node_id)
+        if label is not None:
+            if self.node_labels is None:
+                self.node_labels = {}
+            self.node_labels[node_id] = label
+        return n
 
-    def add_edge(self, u: Any, v: Any, label: Optional[str] = None) -> None:
-        """Add an undirected edge between two nodes.
-
-        Parameters
-        ----------
-        u, v: Any
-            Identifiers of the nodes to connect. They must have been
-            previously added via :meth:`add_node`.
-        label: Optional[str], default None
-            Label associated with this edge (e.g., bond type). The label
-            will be stored for both directions.
-
-        Raises
-        ------
-        KeyError
-            If either ``u`` or ``v`` are not in the graph.
-        ValueError
-            If ``u`` equals ``v`` (self loops are not supported).
-        """
+    def add_edge(
+        self,
+        u: Hashable,
+        v: Hashable,
+        label: Optional[Any] = None,
+        weight: float = 1.0,
+    ) -> None:
         if u == v:
             raise ValueError("Self loops are not supported.")
-        if u not in self._nodes or v not in self._nodes:
-            raise KeyError(f"Both nodes must exist in the graph before adding an edge: {u}, {v}")
-        # Ensure adjacency lists exist
-        self._adj.setdefault(u, [])
-        self._adj.setdefault(v, [])
-        # Append in both directions
-        self._adj[u].append((v, label))
-        self._adj[v].append((u, label))
+        if u not in self._nodes:
+            self.add_node(u)
+        if v not in self._nodes:
+            self.add_node(v)
 
-    def nodes(self) -> Iterable[Node]:
-        """Return an iterable over all nodes in the graph."""
-        return self._nodes.values()
+        self.edges.append((u, v))
+        self._adj.setdefault(u, []).append((v, label, float(weight)))
+        self._adj.setdefault(v, []).append((u, label, float(weight)))
 
-    def iter_edges(self) -> Iterator[Tuple[Any, Any, Optional[str]]]:
-        """Iterate over edges once.
+        if label is not None:
+            if self.edge_labels is None:
+                self.edge_labels = {}
+            self.edge_labels[(u, v)] = label
 
-        Yields
-        ------
-        Tuple[Any, Any, Optional[str]]
-            A tuple (u, v, label) for each undirected edge in the graph.
-            Each edge is yielded once with u < v according to the
-            default Python ordering for the identifiers.
+        if float(weight) != 1.0:
+            if self.edge_weights is None:
+                self.edge_weights = {}
+            self.edge_weights[(u, v)] = float(weight)
+
+    def iter_edges(self) -> Iterator[Tuple[Hashable, Hashable, Optional[Any]]]:
+        """Iterate edges once, yielding (u, v, label).
+
+        This preserves the legacy shape expected by existing writers.
         """
-        seen = set()
-        for u, neighbours in self._adj.items():
-            for v, label in neighbours:
-                if (v, u) not in seen:
-                    seen.add((u, v))
-                    yield (u, v, label)
+        seen: set[Tuple[Hashable, Hashable]] = set()
+        for (u, v) in self.edges:
+            a, b = (u, v) if u <= v else (v, u)
+            if (a, b) in seen:
+                continue
+            seen.add((a, b))
+            lbl = None
+            if self.edge_labels is not None:
+                lbl = self.edge_labels.get((u, v), self.edge_labels.get((v, u)))
+            yield (a, b, lbl)
 
-    def degree(self, node_id: Any) -> int:
-        """Return the degree of a node."""
-        return len(self._adj.get(node_id, []))
+    def iter_edges_with_weights(
+        self,
+    ) -> Iterator[Tuple[Hashable, Hashable, Optional[Any], float]]:
+        """Iterate edges once, yielding (u, v, label, weight)."""
+        seen: set[Tuple[Hashable, Hashable]] = set()
+        for (u, v) in self.edges:
+            a, b = (u, v) if u <= v else (v, u)
+            if (a, b) in seen:
+                continue
+            seen.add((a, b))
+            lbl = None
+            if self.edge_labels is not None:
+                lbl = self.edge_labels.get((u, v), self.edge_labels.get((v, u)))
+            w = 1.0
+            if self.edge_weights is not None:
+                w = float(self.edge_weights.get((u, v), self.edge_weights.get((v, u), 1.0)))
+            yield (a, b, lbl, w)
 
     def number_of_nodes(self) -> int:
         return len(self.nodes)
@@ -176,57 +175,5 @@ class Graph:
     def number_of_edges(self) -> int:
         return len(self.edges)
 
-    def neighbours(self, node_id: Any) -> List[Tuple[Any, Optional[str]]]:
-        """Return a list of neighbours and associated edge labels for a node."""
-        return self._adj.get(node_id, [])
-
-    def to_networkx(self) -> "networkx.Graph":
-        """Convert this graph into a networkx.Graph.
-
-        This convenience method requires `networkx` to be installed. If
-        the import fails a RuntimeError is raised.
-
-        Returns
-        -------
-        networkx.Graph
-            A networkx representation of this graph.
-        """
-        try:
-            import networkx as nx  # type: ignore
-        except ImportError:
-            raise RuntimeError("networkx is required for to_networkx()") from None
-        G = nx.Graph()
-        for node in self.nodes():
-            G.add_node(node.id, label=node.label, **node.data)
-        for u, v, label in self.iter_edges():
-            G.add_edge(u, v, label=label)
-        return G
-
-    @classmethod
-    def from_networkx(cls, G: "networkx.Graph") -> "Graph":
-        """Create a :class:`Graph` from a networkx Graph.
-
-        Node labels will be retrieved from the ``label`` attribute if
-        present; other attributes are stored in the node's data.
-
-        Parameters
-        ----------
-        G: networkx.Graph
-            A networkx graph instance.
-
-        Returns
-        -------
-        Graph
-            A new Graph instance containing the same nodes and edges.
-        """
-        graph = cls()
-        for n, attrs in G.nodes(data=True):
-            label = attrs.pop("label", None)
-            graph.add_node(n, label=label, **attrs)
-        for u, v, attrs in G.edges(data=True):
-            label = attrs.get("label")
-            graph.add_edge(u, v, label=label)
-        return graph
-
     def __repr__(self) -> str:
-        return f"Graph(num_nodes={self.number_of_nodes()}, num_edges={self.number_of_edges()})"
+        return f"Graph(num_nodes={self.number_of_nodes()}, num_edges={self.number_of_edges()}, weighted={self.is_weighted})"
