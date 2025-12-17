@@ -128,6 +128,9 @@ def read_edgelist_dataset(path: str | Path) -> List[Graph]:
             if not line or line.startswith("#"):
                 continue
 
+            # Accept both whitespace-separated and comma-separated edge lists.
+            if "," in line:
+                line = line.replace(",", " ")
             parts = line.split()
             rec_type = parts[0]
 

@@ -14,6 +14,7 @@ from typing import Iterable
 @register
 class GSpanMiner(SubgraphMiner):
     name = "gspan"
+    expected_input_format = "gspan"
 
     def __init__(
         self,
@@ -45,35 +46,36 @@ class GSpanMiner(SubgraphMiner):
         self._parser = parser
         self._gspan_main = gspan_main
 
+    def _run_on_dataset(self, db_path: Path, support: int):
+        args = [
+            "-s", str(support),
+            "-d", str(self.directed),
+            "-l", str(self.min_vertices),
+            "-p", str(self.visualize),
+            "-w", str(self.write_out),
+            str(db_path),
+        ]
+        if self.max_vertices is not None:
+            args.extend(["-u", str(self.max_vertices)])
+        FLAGS, _ = self._parser.parse_known_args(args=args)
+        t0 = time.time()
+        self.logger.debug("Calling gSpan with args: %s", " ".join(args))
+        gs = self._gspan_main(FLAGS)
+        runtime = time.time() - t0
+        return runtime, gs
+
     def mine(self, graphs: List[Graph], min_support: Optional[int] = None, **kwargs) -> MiningResult:
         graphs = list(self._handle_weights(graphs))
         support = int(min_support if min_support is not None else self.min_support)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
-            db_path = tmpdir_path / "gspan_db"
+            db_path = tmpdir_path / "gspan_db.data"
 
             # write graphs in gspan format
             write_gspan_dataset(graphs, db_path)
+            runtime, gs = self._run_on_dataset(db_path, support)
 
-            args = [
-                "-s", str(support),
-                "-d", str(self.directed),
-                "-l", str(self.min_vertices),
-                "-p", str(self.visualize),
-                "-w", str(self.write_out),
-                str(db_path),
-            ]
-            if self.max_vertices is not None:
-                args.extend(["-u", str(self.max_vertices)])
-
-            FLAGS, _ = self._parser.parse_known_args(args=args)
-            t0 = time.time()
-            self.logger.debug("Calling gSpan with args: %s", " ".join(args))
-            gs = self._gspan_main(FLAGS)  # noqa: F841  # we'll hook patterns later
-            runtime = time.time() - t0
-
-        
         patterns = []
         for pid, rec in enumerate(gs.results):
             g_span_graph = rec["graph"]          # gspan.graph.Graph
@@ -108,4 +110,46 @@ class GSpanMiner(SubgraphMiner):
             ),
             runtime=runtime,
             metadata={"backend": "gspan-mining"},
+        )
+
+    def mine_native(self, path: str | Path, min_support: int, **kwargs) -> MiningResult:
+        """Run gSpan directly on a user-supplied gSpan dataset file."""
+        db_path = Path(path)
+        support = int(min_support)
+        runtime, gs = self._run_on_dataset(db_path, support)
+
+        patterns = []
+        for pid, rec in enumerate(gs.results):
+            g_span_graph = rec["graph"]
+            sup = rec["support"]
+            pattern_graph = convert_gspan_graph(g_span_graph)
+            patterns.append(
+                SubgraphPattern(
+                    pid=pid,
+                    graph=pattern_graph,
+                    support=sup,
+                    frequency=None,
+                    occurrences=[],
+                    attributes={
+                        "num_vertices": rec.get("num_vertices"),
+                        "description": rec.get("description"),
+                        "where": rec.get("where"),
+                    },
+                )
+            )
+
+        return MiningResult(
+            patterns=patterns,
+            algorithm=self.name,
+            params=dict(
+                min_support=support,
+                directed=self.directed,
+                min_vertices=self.min_vertices,
+                max_vertices=self.max_vertices,
+                visualize=self.visualize,
+                write_out=self.write_out,
+                input_format="gspan",
+            ),
+            runtime=runtime,
+            metadata={"backend": "gspan-mining", "input_dataset": str(db_path)},
         )

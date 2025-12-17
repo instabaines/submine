@@ -18,6 +18,16 @@ __all__ = ["SubgraphMiner", "register"]
 class SubgraphMiner(ABC):
     name: str = "base"
 
+    # Native file input contract
+    # -------------------------
+    # Some algorithms consume an on-disk dataset in a specific format.
+    # If `expected_input_format` is set (e.g., "lg" or "gspan"), the high-level
+    # API can transcode user-provided files to this format and call `mine_native`.
+    #
+    # By default, miners operate on in-memory Graph objects via `mine()`.
+    expected_input_format: str | None = None
+    multi_graph_policy: str = "reject"  # reject | batch | merge (reserved)
+
     # Weight handling
     # -------------
     # Most classical subgraph miners operate on *labeled* (unweighted) graphs.
@@ -55,6 +65,18 @@ class SubgraphMiner(ABC):
     @abstractmethod
     def mine(self, graphs: Iterable[Graph], min_support: int, **kwargs) -> MiningResult:
         raise NotImplementedError
+
+    def mine_native(self, path: str | Path, min_support: int, **kwargs) -> MiningResult:
+        """Run the miner on a native on-disk dataset.
+
+        Miners with `expected_input_format != None` should override this method.
+        The default implementation indicates that the miner does not accept a
+        native path entrypoint.
+        """
+        raise NotImplementedError(
+            f"Algorithm '{self.name}' does not implement mine_native(); "
+            "use mine(graphs=...) instead."
+        )
 
     def check_availability(self) -> None:
         return None

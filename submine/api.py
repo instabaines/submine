@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Iterable, Union, Sequence
+from typing import Iterable, Union, Sequence, Optional
 import networkx as nx
 
 from .core.graph import Graph
@@ -24,20 +26,9 @@ def _normalize_graph_source(source: GraphSourceLike) -> Iterable[Graph]:
 
     # 2. Path / str → load from file
     if isinstance(source, (str, Path)):
-        path = Path(source)
-        # decide by extension or user config
-        if path.suffix == ".gspan" or ".data" in str(source):
-            from .io.gspan import read_gspan_dataset
-            return read_gspan_dataset(path)
-        elif path.suffix.lower() == ".lg":
-            # Load a single lg graph (streaming reader)
-            from .io.sopagrami import read_lg
-            return [read_lg(path)]
-        elif path.suffix in {".edgelist", ".txt"}:
-            from .io.common import read_edgelist_dataset
-            return read_edgelist_dataset(path)
-        # etc.
-        raise ValueError(f"Unsupported graph file format: {path.suffix}")
+        from .io.transcode import load_graphs
+
+        return load_graphs(Path(source))
 
     # 3. Iterable of Graphs → pass through
     try:
@@ -46,7 +37,7 @@ def _normalize_graph_source(source: GraphSourceLike) -> Iterable[Graph]:
         pass
     else:
         # could be list[Graph], generator, GraphSource, etc.
-        # You may want to sanity check items, but can be lazy.
+        #TODO:  sanity check items, but can be lazy.
         return it
 
     raise TypeError(f"Cannot interpret {type(source)} as a graph source")
@@ -68,14 +59,30 @@ def mine_subgraphs(
     AlgoCls = get_algorithm(algorithm)
     miner = AlgoCls(**algo_params)
 
-    # Special-case: if the user supplies a native .lg file for SoPaGraMi,
-    # pass it through directly (no re-parse, no re-write).
+    # If user provided a path, and the miner declares a native on-disk format,
+    # transcode directly to that format (only when needed) and call mine_native().
     if isinstance(data, (str, Path)):
-        path = Path(data)
-        if path.suffix.lower() == ".lg" and getattr(miner, "name", "").lower() == "sopagrami":
-            if not hasattr(miner, "mine_lg"):
-                raise RuntimeError("SoPaGraMi miner does not expose mine_lg(); update the wrapper.")
-            return miner.mine_lg(path, min_support=min_support)
+        from .io.transcode import detect_format, transcode_path
+        from .io.common import temporary_directory
+
+        src_path = Path(data)
+        src_fmt: Optional[str]
+        try:
+            src_fmt = detect_format(src_path)
+        except Exception:
+            src_fmt = None
+
+        expected = getattr(miner, "expected_input_format", None)
+        if expected is not None:
+            if src_fmt == expected:
+                return miner.mine_native(src_path, min_support=min_support)
+
+            # Not in the miner's native format: transcode once to native file.
+            with temporary_directory() as tmp:
+                suffix = ".lg" if expected == "lg" else ".data"
+                native_path = tmp / f"native{suffix}"
+                transcode_path(src_path, native_path, dst_fmt=expected, src_fmt=src_fmt)
+                return miner.mine_native(native_path, min_support=min_support)
 
     graphs = _normalize_graph_source(data)
     return miner.mine(graphs, min_support=min_support)

@@ -24,6 +24,7 @@ class SoPaGraMiMiner(SubgraphMiner):
     """
     name = "sopagrami"
     expected_input_format = "lg"
+    multi_graph_policy = "reject"
 
     def __init__(
         self,
@@ -146,7 +147,7 @@ class SoPaGraMiMiner(SubgraphMiner):
             metadata={"backend": "sopagrami_cpp"},
         )
 
-    def mine_lg(self, lg_path: str | Path, min_support: Optional[int] = None, **kwargs) -> MiningResult:
+    def mine_native(self, lg_path: str | Path, min_support: Optional[int] = None, **kwargs) -> MiningResult:
         """Run SoPaGraMi directly on a user-supplied ``.lg`` file.
 
         This avoids re-parsing/re-writing the file, which is important for
