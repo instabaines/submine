@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 from .registry import available_algorithms
+from .errors import (
+    SubmineError,
+    SubmineInputError,
+    ParameterValidationError,
+    BackendUnavailableError,
+    BackendExecutionError,
+    ResourceLimitError,
+)
 
 
 # Import algorithms so they register themselves via @register

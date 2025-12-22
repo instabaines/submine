@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List, Optional
+
+from ..utils.checks import safe_read_text, assert_regular_file
+
 import tempfile
 import time
 
@@ -9,6 +12,7 @@ from .base import SubgraphMiner, register
 from ..core.graph import Graph
 from ..core.result import MiningResult, SubgraphPattern
 from ..io.gspan import write_gspan_dataset,convert_gspan_graph
+from ..errors import ParameterValidationError
 from typing import Iterable
 
 @register
@@ -27,6 +31,16 @@ class GSpanMiner(SubgraphMiner):
         verbose: bool = False,
     ) -> None:
         super().__init__(verbose=verbose)
+        # Parameter validation (publish-safe defaults)
+        if not isinstance(min_support, int) or min_support <= 0:
+            raise ParameterValidationError(f"min_support must be a positive int; got {min_support!r}")
+        if not isinstance(min_vertices, int) or min_vertices < 1:
+            raise ParameterValidationError(f"min_vertices must be an int >= 1; got {min_vertices!r}")
+        if max_vertices is not None:
+            if not isinstance(max_vertices, int) or max_vertices < min_vertices:
+                raise ParameterValidationError(
+                    f"max_vertices must be None or an int >= min_vertices ({min_vertices}); got {max_vertices!r}"
+                )
         self.min_support = min_support
         self.directed = directed
         self.min_vertices = min_vertices
@@ -35,20 +49,25 @@ class GSpanMiner(SubgraphMiner):
         self.write_out = write_out
 
 
-    def _run_on_dataset(self,db_path:Path,support:int):
+    def _run_on_dataset(self, db_path: Path, support: int):
         from . import gspan_cpp as gspan_mine
+
         t0 = time.time()
-        with open(db_path) as f:
-            data = f.read()
-            #TODO Support other kwargs
-            res = gspan_mine.mine_from_string(data, minsup=support, \
-                                              directed=self.directed,maxpat_min=self.min_vertices, \
-                                              maxpat_max = self.max_vertices  \
-                                              if self.max_vertices is not None else 0xFFFFFFFF) 
-            
-            runtime = time.time() - t0
-            return runtime, res
-        
+
+        db_path = assert_regular_file(db_path)
+        data = safe_read_text(db_path)
+
+        # TODO: plumb through additional kwargs once exposed by the binding.
+        res = gspan_mine.mine_from_string(
+            data,
+            minsup=support,
+            directed=self.directed,
+            maxpat_min=self.min_vertices,
+            maxpat_max=self.max_vertices if self.max_vertices is not None else 0xFFFFFFFF,
+        )
+
+        runtime = time.time() - t0
+        return runtime, res
 
     def mine(self, graphs: List[Graph], min_support: Optional[int] = None, **kwargs) -> MiningResult:
         graphs = list(self._handle_weights(graphs))

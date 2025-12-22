@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Dict, Hashable, Optional, Tuple
 
 from ..core.graph import Graph
+from ..errors import SubmineInputError
+from ..utils.checks import iter_text_lines
 
 
 def read_lg(path: str | Path) -> Graph:
@@ -42,7 +44,7 @@ def read_lg(path: str | Path) -> Graph:
 
             if rec == "v":
                 if len(parts) < 3:
-                    raise ValueError(f"Malformed vertex line: {line!r}")
+                    raise SubmineInputError(f"Malformed vertex line: {line!r}")
                 vid = int(parts[1])
                 lbl = parts[2]
                 if vid not in node_labels:
@@ -52,7 +54,7 @@ def read_lg(path: str | Path) -> Graph:
 
             if rec == "e":
                 if len(parts) < 3:
-                    raise ValueError(f"Malformed edge line: {line!r}")
+                    raise SubmineInputError(f"Malformed edge line: {line!r}")
                 u = int(parts[1])
                 v = int(parts[2])
                 edges.append((u, v))

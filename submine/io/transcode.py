@@ -37,7 +37,7 @@ FMT_GSPAN = "gspan"  # gSpan dataset format (t/v/e ... t#-1)
 FMT_GEXF = "gexf"  # NetworkX-readable GEXF
 FMT_EDGELIST = "edgelist"  # whitespace-separated u v [label]
 
-_GSPAN_DATA_RE = re.compile(r".*\.data(\.\d+)?$") # matches data.x
+_GSPAN_DATA_RE = re.compile(r".*\.data(\.[A-Za-z0-9_-]+)?$")  # matches .data, .data.x, .data.2 etc
 _KNOWN_FORMATS: List[FormatSpec] = [
     FormatSpec(FMT_LG, (".lg",)),
     # treat both classic .gspan and Gatech-like *.data / *.data.x as gSpan datasets
@@ -50,20 +50,33 @@ _KNOWN_FORMATS: List[FormatSpec] = [
 def detect_format(path: str | Path) -> str:
     """Detect the most likely input format from a file path.
 
+    Detection is filename-based (not content-based) by design for speed.
+
     Notes
     -----
-    - ``.data.x`` is treated as a suffix *pair*.
+    - Gatech-style gSpan datasets frequently use ``*.data`` and ``*.data.<tag>`` where
+      ``<tag>`` may be an integer shard index (e.g., ``.data.2``) or an arbitrary token
+      (e.g., ``.data.x``). We treat all of these as :data:`FMT_GSPAN`.
     - For ``.txt/.csv/.tsv`` we assume edge-list unless otherwise specified.
     """
     p = Path(path)
-    s = p.name.lower()
+    name = p.name.lower()
     suf = p.suffix.lower()
 
-    if _GSPAN_DATA_RE.match(s):
+    # Handle multi-suffix gSpan dataset conventions first.
+    if _GSPAN_DATA_RE.match(name):
         return FMT_GSPAN
+
+    # Exact suffix matches (single suffix) for known formats.
     for spec in _KNOWN_FORMATS:
         if suf in spec.suffixes:
             return spec.key
+
+    # Fallback for compound suffixes like ".data.x" where Path.suffix == ".x".
+    for spec in _KNOWN_FORMATS:
+        for ss in spec.suffixes:
+            if name.endswith(ss):
+                return spec.key
 
     raise UnknownFormatError(f"Cannot detect graph format from file: {p}")
 

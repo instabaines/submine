@@ -4,6 +4,10 @@ from pathlib import Path
 from typing import Iterable, Union, Sequence, Optional
 import networkx as nx
 
+from .utils.checks import assert_regular_file
+from .errors import SubmineInputError, ParameterValidationError
+
+
 from .core.graph import Graph
 from . import get_mining_algorithm as get_algorithm
 from .core.result import MiningResult, SubgraphPattern
@@ -59,13 +63,16 @@ def mine_subgraphs(
     AlgoCls = get_algorithm(algorithm)
     miner = AlgoCls(**algo_params)
 
+    if not isinstance(min_support, int) or min_support <= 0:
+        raise ParameterValidationError(f"min_support must be a positive integer; got {min_support!r}")
+
     # If user provided a path, and the miner declares a native on-disk format,
     # transcode directly to that format (only when needed) and call mine_native().
     if isinstance(data, (str, Path)):
         from .io.transcode import detect_format, transcode_path
         from .io.common import temporary_directory
 
-        src_path = Path(data)
+        src_path = assert_regular_file(Path(data))
         src_fmt: Optional[str]
         try:
             src_fmt = detect_format(src_path)

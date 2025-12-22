@@ -11,6 +11,7 @@ from ..registry import available_algorithms
 from ..core.graph import Graph
 from ..core.result import MiningResult
 from ..utils.logging import get_logger
+from ..errors import BackendExecutionError, ParameterValidationError
 from typing import Iterable
 __all__ = ["SubgraphMiner", "register"]
 
@@ -81,9 +82,41 @@ class SubgraphMiner(ABC):
     def check_availability(self) -> None:
         return None
 
-    def run_external(self, cmd: List[str], *, cwd: Optional[Path] = None) -> str:
+    def run_external(
+        self,
+        cmd: List[str],
+        *,
+        cwd: Optional[Path] = None,
+        timeout_s: int = 300,
+        env: Optional[dict[str, str]] = None,
+    ) -> str:
+        """Run an external command defensively.
+
+        - Uses ``shell=False`` implicitly (we pass a list).
+        - Applies a default timeout to avoid hung processes.
+        - Captures stdout/stderr for error reporting.
+        """
+        if not cmd or not isinstance(cmd[0], str):
+            raise ParameterValidationError("cmd must be a non-empty list of strings")
+
+        # Basic hardening against accidental injection via newlines/NULs.
+        for part in cmd:
+            if not isinstance(part, str):
+                raise TypeError("All cmd parts must be strings")
+            if "\x00" in part or "\n" in part or "\r" in part:
+                raise ParameterValidationError("Unsafe characters in command argument")
+
         self.logger.debug("Running external command: %s", " ".join(cmd))
-        completed = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
+        completed = subprocess.run(
+            cmd,
+            cwd=cwd,
+            text=True,
+            capture_output=True,
+            timeout=timeout_s,
+            env=env,
+            check=False,
+            close_fds=True,
+        )
         self.logger.debug("Command stdout: %s", completed.stdout)
         if completed.returncode != 0:
             self.logger.error("Command failed with stderr: %s", completed.stderr)
