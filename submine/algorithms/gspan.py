@@ -33,36 +33,22 @@ class GSpanMiner(SubgraphMiner):
         self.max_vertices = max_vertices
         self.visualize = visualize
         self.write_out = write_out
-        
-        try:
-            from  ..thirdparty.gspan_mining.config import parser  # type: ignore
-            from  ..thirdparty.gspan_mining.main import main as gspan_main  # type: ignore
-        except ImportError as e:
-            raise ImportError(
-                "GSpanMiner requires the 'gspan-ming' package.\n"
-                "Install it with: pip install gspan-mining"
-            ) from e
 
-        self._parser = parser
-        self._gspan_main = gspan_main
 
-    def _run_on_dataset(self, db_path: Path, support: int):
-        args = [
-            "-s", str(support),
-            "-d", str(self.directed),
-            "-l", str(self.min_vertices),
-            "-p", str(self.visualize),
-            "-w", str(self.write_out),
-            str(db_path),
-        ]
-        if self.max_vertices is not None:
-            args.extend(["-u", str(self.max_vertices)])
-        FLAGS, _ = self._parser.parse_known_args(args=args)
+    def _run_on_dataset(self,db_path:Path,support:int):
+        from . import gspan_cpp as gspan_mine
         t0 = time.time()
-        self.logger.debug("Calling gSpan with args: %s", " ".join(args))
-        gs = self._gspan_main(FLAGS)
-        runtime = time.time() - t0
-        return runtime, gs
+        with open(db_path) as f:
+            data = f.read()
+            #TODO Support other kwargs
+            res = gspan_mine.mine_from_string(data, minsup=support, \
+                                              directed=self.directed,maxpat_min=self.min_vertices, \
+                                              maxpat_max = self.max_vertices  \
+                                              if self.max_vertices is not None else 0xFFFFFFFF) 
+            
+            runtime = time.time() - t0
+            return runtime, res
+        
 
     def mine(self, graphs: List[Graph], min_support: Optional[int] = None, **kwargs) -> MiningResult:
         graphs = list(self._handle_weights(graphs))
@@ -77,25 +63,23 @@ class GSpanMiner(SubgraphMiner):
             runtime, gs = self._run_on_dataset(db_path, support)
 
         patterns = []
-        for pid, rec in enumerate(gs.results):
-            g_span_graph = rec["graph"]          # gspan.graph.Graph
-            support = rec["support"]
-            pattern_graph = convert_gspan_graph(g_span_graph)
-
+        for pid,rec in enumerate(gs):
+            pattern_graph = Graph(edges=rec["edges"],nodes=rec['nodes'])
+            support = rec['support']
             patterns.append(
                 SubgraphPattern(
                     pid=pid,
                     graph=pattern_graph,
                     support=support,
                     frequency=None,
-                    occurrences=[],  # can fill later if you track embeddings
+                    occurrences=[],  # can fill later if track embeddings
                     attributes={
-                        "num_vertices": rec["num_vertices"],
-                        "description": rec["description"],
-                        "where": rec["where"],
+                        "num_vertices": pattern_graph.number_of_nodes(),
+                        "graph_ids": rec["graph_ids"],
                     },
                 )
             )
+    
 
         return MiningResult(
             patterns=patterns,
@@ -119,21 +103,19 @@ class GSpanMiner(SubgraphMiner):
         runtime, gs = self._run_on_dataset(db_path, support)
 
         patterns = []
-        for pid, rec in enumerate(gs.results):
-            g_span_graph = rec["graph"]
-            sup = rec["support"]
-            pattern_graph = convert_gspan_graph(g_span_graph)
+        for pid,rec in enumerate(gs):
+            pattern_graph = Graph(edges=rec["edges"],nodes=rec['nodes'])
+            support = rec['support']
             patterns.append(
                 SubgraphPattern(
                     pid=pid,
                     graph=pattern_graph,
-                    support=sup,
+                    support=support,
                     frequency=None,
-                    occurrences=[],
+                    occurrences=[],  # can fill later if track embeddings
                     attributes={
-                        "num_vertices": rec.get("num_vertices"),
-                        "description": rec.get("description"),
-                        "where": rec.get("where"),
+                        "num_vertices": pattern_graph.number_of_nodes(),
+                        "graph_ids": rec["graph_ids"],
                     },
                 )
             )
