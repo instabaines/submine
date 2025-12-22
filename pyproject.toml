@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.5", "cmake>=3.15", "ninja"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "submine"
