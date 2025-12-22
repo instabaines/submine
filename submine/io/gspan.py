@@ -121,9 +121,8 @@ def read_gspan_dataset(path: Path | str) -> List[Graph]:
             # Unknown record; you can choose to ignore or raise
             raise SubmineInputError(f"Unknown record type '{rec_type}' in line: {line!r}")
 
-        # in case file had no "t # -1" but ended after last graph
-        flush_current_graph()
-
+    # If file ended without the required terminator, still return what we have.
+    flush_current_graph()
     return graphs
 
 def convert_gspan_graph(gspan_g) -> Graph:

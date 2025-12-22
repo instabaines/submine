@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from ..utils.checks import safe_read_text, assert_regular_file
+from ..errors import ParameterValidationError
 
 import tempfile
 import time
@@ -12,7 +13,6 @@ from .base import SubgraphMiner, register
 from ..core.graph import Graph
 from ..core.result import MiningResult, SubgraphPattern
 from ..io.gspan import write_gspan_dataset,convert_gspan_graph
-from ..errors import ParameterValidationError
 from typing import Iterable
 
 @register

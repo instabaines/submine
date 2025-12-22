@@ -108,7 +108,9 @@ def read_edgelist_dataset(path: str | Path) -> List[Graph]:
         for u, v in current_edges:
             nodes_set.add(u)
             nodes_set.add(v)
-        nodes = list(nodes_set)
+        # Deterministic node ordering for reproducible transcoding/writing.
+        # Edge lists may mix ints/strings; sort by type name then by string value.
+        nodes = sorted(nodes_set, key=lambda x: (type(x).__name__, str(x)))
 
         edge_labels = current_edge_labels if any_labels_in_current else None
 
@@ -166,7 +168,6 @@ def read_edgelist_dataset(path: str | Path) -> List[Graph]:
         else:
             current_edges.append((u, v))
 
-        # flush last graph
-        flush_current_graph()
-
+    # Flush final graph (single-graph files without a trailing header)
+    flush_current_graph()
     return graphs

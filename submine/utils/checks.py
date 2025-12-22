@@ -29,8 +29,8 @@ def iter_text_lines(
     path: str | Path,
     *,
     encoding: str = "utf-8",
-    max_lines: int = DEFAULT_MAX_LINES,
-    max_line_bytes: int = DEFAULT_MAX_LINE_BYTES,
+    max_lines: int | None = None,
+    max_line_bytes: int | None = None,
 ):
     """Yield decoded lines from *path* with hard limits.
 
@@ -43,6 +43,13 @@ def iter_text_lines(
       - Lines are decoded with ``errors='replace'`` to avoid UnicodeDecodeError.
       - The returned lines are stripped of trailing ``\n``.
     """
+    # Resolve limits at call time so test suites (and embedding apps) can
+    # override them via environment variables without requiring a reload.
+    if max_lines is None:
+        max_lines = int(os.getenv("SUBMINE_MAX_LINES", str(DEFAULT_MAX_LINES)))
+    if max_line_bytes is None:
+        max_line_bytes = int(os.getenv("SUBMINE_MAX_LINE_BYTES", str(DEFAULT_MAX_LINE_BYTES)))
+
     p = assert_regular_file(path)
     count = 0
     with p.open("rb") as f:

@@ -1,0 +1,6 @@
+# simple labeled weighted graph
+v 0 A
+v 1 B
+v 2 C
+e 0 1 rel 0.5
+e 1 2
