@@ -10,6 +10,7 @@ from .base import SubgraphMiner, register
 from ..core.graph import Graph
 from ..core.result import MiningResult, SubgraphPattern
 from ..io.sopagrami import read_lg, write_lg
+from ..errors import ParameterValidationError
 
 
 
@@ -36,6 +37,11 @@ class SoPaGraMiMiner(SubgraphMiner):
         verbose: bool = False,
     ) -> None:
         super().__init__(verbose=verbose)
+        # Parameter validation (publish-safe defaults)
+        if not isinstance(tau, int) or tau < 1:
+            raise ParameterValidationError(f"tau must be an int >= 1; got {tau!r}")
+        if not isinstance(num_threads, int) or num_threads < 0:
+            raise ParameterValidationError(f"num_threads must be an int >= 0; got {num_threads!r}")
         self.tau = tau
         self.directed = directed
         self.sorted_seeds = sorted_seeds

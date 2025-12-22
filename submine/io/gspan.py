@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Dict, Hashable, Iterable, List, Tuple
 
 from ..core.graph import Graph
+from ..errors import SubmineInputError
+from ..utils.checks import iter_text_lines
 
 
 
@@ -58,71 +60,69 @@ def read_gspan_dataset(path: Path | str) -> List[Graph]:
         current_edges = None
         current_edge_labels = None
 
-    with path.open("r") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if not line:
-                continue
-            parts = line.split()
+    for raw_line in iter_text_lines(path):
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split()
 
-            rec_type = parts[0]
+        rec_type = parts[0]
 
-            # Graph header: t # gid
-            if rec_type == "t":
-                # flush previous graph if any
-                if len(parts) >= 3:
-                    gid = int(parts[2])
-                else:
-                    raise ValueError(f"Malformed 't' line: {line!r}")
-
-                if gid == -1:
-                    # End-of-dataset sentinel: flush the last graph and stop
-                    flush_current_graph()
-                    break
-
-                # start a new graph
-                flush_current_graph()
-                current_nodes = []
-                current_node_labels = {}
-                current_edges = []
-                current_edge_labels = {}
-
-            elif rec_type == "v":
-                if current_nodes is None:
-                    raise ValueError(f"Vertex line outside of any graph: {line!r}")
-                if len(parts) < 3:
-                    raise ValueError(f"Malformed 'v' line: {line!r}")
-                vid = int(parts[1])
-                lbl = int(parts[2])
-                current_nodes.append(vid)
-                current_node_labels[vid] = lbl  # type: ignore[arg-type]
-
-            elif rec_type == "e":
-                if current_edges is None:
-                    raise ValueError(f"Edge line outside of any graph: {line!r}")
-                if len(parts) < 4:
-                    raise ValueError(f"Malformed 'e' line: {line!r}")
-                u = int(parts[1])
-                v = int(parts[2])
-                lbl = int(parts[3])
-
-                # treat as undirected, avoid duplicates
-                if u <= v:
-                    key = (u, v)
-                else:
-                    key = (v, u)
-
-                if key not in current_edge_labels:  # type: ignore[operator]
-                    current_edges.append(key)       # type: ignore[arg-type]
-                    current_edge_labels[key] = lbl  # type: ignore[index]
-
+        # Graph header: t # gid
+        if rec_type == "t":
+            # flush previous graph if any
+            if len(parts) >= 3:
+                gid = int(parts[2])
             else:
-                # Unknown record; you can choose to ignore or raise
-                raise ValueError(f"Unknown record type '{rec_type}' in line: {line!r}")
+                raise ValueError(f"Malformed 't' line: {line!r}")
 
-        # in case file had no "t # -1" but ended after last graph
-        flush_current_graph()
+            if gid == -1:
+                # End-of-dataset sentinel: flush the last graph and stop
+                flush_current_graph()
+                break
 
+            # start a new graph
+            flush_current_graph()
+            current_nodes = []
+            current_node_labels = {}
+            current_edges = []
+            current_edge_labels = {}
+
+        elif rec_type == "v":
+            if current_nodes is None:
+                raise ValueError(f"Vertex line outside of any graph: {line!r}")
+            if len(parts) < 3:
+                raise ValueError(f"Malformed 'v' line: {line!r}")
+            vid = int(parts[1])
+            lbl = int(parts[2])
+            current_nodes.append(vid)
+            current_node_labels[vid] = lbl  # type: ignore[arg-type]
+
+        elif rec_type == "e":
+            if current_edges is None:
+                raise ValueError(f"Edge line outside of any graph: {line!r}")
+            if len(parts) < 4:
+                raise ValueError(f"Malformed 'e' line: {line!r}")
+            u = int(parts[1])
+            v = int(parts[2])
+            lbl = int(parts[3])
+
+            # treat as undirected, avoid duplicates
+            if u <= v:
+                key = (u, v)
+            else:
+                key = (v, u)
+
+            if key not in current_edge_labels:  # type: ignore[operator]
+                current_edges.append(key)       # type: ignore[arg-type]
+                current_edge_labels[key] = lbl  # type: ignore[index]
+
+        else:
+            # Unknown record; you can choose to ignore or raise
+            raise SubmineInputError(f"Unknown record type '{rec_type}' in line: {line!r}")
+
+    # If file ended without the required terminator, still return what we have.
+    flush_current_graph()
     return graphs
 
 def convert_gspan_graph(gspan_g) -> Graph:
@@ -220,6 +220,7 @@ def write_gspan_dataset(graphs: Iterable[Graph], path: Path) -> None:
       - All labels must be integers >= 2 (we map them if needed).
     """
     
+    graphs = list(graphs)
     node_label_map, edge_label_map = _build_label_maps(graphs)
 
     with path.open("w") as f:

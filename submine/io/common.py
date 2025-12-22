@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple, Any
 
 from ..core.graph import Graph
+from ..errors import SubmineInputError
+from ..utils.checks import iter_text_lines
 
 
 def ensure_dir(path: str | Path) -> Path:
@@ -106,7 +108,9 @@ def read_edgelist_dataset(path: str | Path) -> List[Graph]:
         for u, v in current_edges:
             nodes_set.add(u)
             nodes_set.add(v)
-        nodes = list(nodes_set)
+        # Deterministic node ordering for reproducible transcoding/writing.
+        # Edge lists may mix ints/strings; sort by type name then by string value.
+        nodes = sorted(nodes_set, key=lambda x: (type(x).__name__, str(x)))
 
         edge_labels = current_edge_labels if any_labels_in_current else None
 
@@ -122,50 +126,48 @@ def read_edgelist_dataset(path: str | Path) -> List[Graph]:
         current_edge_labels = None
         any_labels_in_current = False
 
-    with path.open("r") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
+    for raw_line in iter_text_lines(path):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
 
-            # Accept both whitespace-separated and comma-separated edge lists.
-            if "," in line:
-                line = line.replace(",", " ")
-            parts = line.split()
-            rec_type = parts[0]
+        # Accept both whitespace-separated and comma-separated edge lists.
+        if "," in line:
+            line = line.replace(",", " ")
+        parts = line.split()
+        rec_type = parts[0]
 
-            # Multi-graph header: t # gid
-            if rec_type == "t" and len(parts) >= 3 and parts[1] == "#":
-                # flush previous graph, start new
-                flush_current_graph()
-                current_edges = []
-                current_edge_labels = {}
-                any_labels_in_current = False
-                # we ignore gid value; it's just a marker
-                continue
+        # Multi-graph header: t # gid
+        if rec_type == "t" and len(parts) >= 3 and parts[1] == "#":
+            # flush previous graph, start new
+            flush_current_graph()
+            current_edges = []
+            current_edge_labels = {}
+            any_labels_in_current = False
+            # we ignore gid value; it's just a marker
+            continue
 
-            # Otherwise, treat as an edge line: u v [label]
-            if current_edges is None:
-                # No graph header seen yet: assume single-graph file
-                current_edges = []
-                current_edge_labels = {}
-                any_labels_in_current = False
+        # Otherwise, treat as an edge line: u v [label]
+        if current_edges is None:
+            # No graph header seen yet: assume single-graph file
+            current_edges = []
+            current_edge_labels = {}
+            any_labels_in_current = False
 
-            if len(parts) < 2:
-                raise ValueError(f"Malformed edge line: {line!r}")
+        if len(parts) < 2:
+            raise ValueError(f"Malformed edge line: {line!r}")
 
-            u = _maybe_int(parts[0])
-            v = _maybe_int(parts[1])
+        u = _maybe_int(parts[0])
+        v = _maybe_int(parts[1])
 
-            if len(parts) >= 3:
-                lbl = _maybe_int(parts[2])
-                any_labels_in_current = True
-                current_edges.append((u, v))
-                current_edge_labels[(u, v)] = lbl  # type: ignore[index]
-            else:
-                current_edges.append((u, v))
+        if len(parts) >= 3:
+            lbl = _maybe_int(parts[2])
+            any_labels_in_current = True
+            current_edges.append((u, v))
+            current_edge_labels[(u, v)] = lbl  # type: ignore[index]
+        else:
+            current_edges.append((u, v))
 
-        # flush last graph
-        flush_current_graph()
-
+    # Flush final graph (single-graph files without a trailing header)
+    flush_current_graph()
     return graphs
