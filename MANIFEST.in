@@ -1,2 +1,13 @@
+include README.md
+include pyproject.toml
+include requirements-dev.txt
+include pytest.ini
+
 recursive-include submine *.py
-recursive-include submine *.json *.yaml *.yml *.txt *.md
+recursive-include tests *.py *.md *.txt *.csv *.tsv *.json *.yaml *.yml *.gexf *.edgelist *.lg *.data *.gspan
+
+global-exclude *.py[cod]
+global-exclude *.so *.pyd *.dll *.dylib
+global-exclude .DS_Store
+global-exclude */__pycache__/*
+prune .pytest_cache
