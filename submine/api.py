@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, Union, Sequence, Optional
 import networkx as nx
 
+import inspect
 from .utils.checks import assert_regular_file
 from .errors import SubmineInputError, ParameterValidationError
 
@@ -22,6 +23,17 @@ GraphSourceLike = Union[
     # later: DB handles, etc.
 ]
 
+
+def _accepted_kwargs(callable_obj):
+    sig = inspect.signature(callable_obj)
+    accepted = set()
+    has_var_kw = False
+    for name, p in sig.parameters.items():
+        if p.kind == inspect.Parameter.VAR_KEYWORD:
+            has_var_kw = True
+        elif p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
+            accepted.add(name)
+    return accepted, has_var_kw
 
 def _normalize_graph_source(source: GraphSourceLike) -> Iterable[Graph]:
     # 1. Already an internal Graph → wrap in list
@@ -61,7 +73,34 @@ def mine_subgraphs(
       - a path to a graph dataset on disk
     """
     AlgoCls = get_algorithm(algorithm)
-    miner = AlgoCls(**algo_params)
+    # Split kwargs between __init__ and mine()
+    init_keys, init_var = _accepted_kwargs(AlgoCls.__init__)
+    mine_keys, mine_var = _accepted_kwargs(AlgoCls.mine)
+
+    init_params = {}
+    run_params = {}
+    unknown = {}
+
+    for k, v in algo_params.items():
+        in_init = (k in init_keys) or init_var
+        in_mine = (k in mine_keys) or mine_var
+
+        # Prefer explicit match if both accept (rare but possible)
+        if k in init_keys and k in mine_keys:
+            # Policy choice: treat as runtime override
+            run_params[k] = v
+        elif k in init_keys:
+            init_params[k] = v
+        elif k in mine_keys:
+            run_params[k] = v
+        else:
+            unknown[k] = v
+
+    if unknown:
+        raise ParameterValidationError(
+            f"Unsupported parameters for algorithm='{algorithm}': {sorted(unknown.keys())}"
+        )
+    miner = AlgoCls(**init_params)
 
     if not isinstance(min_support, int) or min_support <= 0:
         raise ParameterValidationError(f"min_support must be a positive integer; got {min_support!r}")
@@ -82,14 +121,14 @@ def mine_subgraphs(
         expected = getattr(miner, "expected_input_format", None)
         if expected is not None:
             if src_fmt == expected:
-                return miner.mine_native(src_path, min_support=min_support)
+                return miner.mine_native(src_path, min_support=min_support, **run_params)
 
             # Not in the miner's native format: transcode once to native file.
             with temporary_directory() as tmp:
                 suffix = ".lg" if expected == "lg" else ".data"
                 native_path = tmp / f"native{suffix}"
                 transcode_path(src_path, native_path, dst_fmt=expected, src_fmt=src_fmt)
-                return miner.mine_native(native_path, min_support=min_support)
+                return miner.mine_native(native_path, min_support=min_support, **run_params)
 
     graphs = _normalize_graph_source(data)
-    return miner.mine(graphs, min_support=min_support)
+    return miner.mine(graphs, min_support=min_support,**run_params)
