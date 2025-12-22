@@ -4,16 +4,18 @@ project(gspan_cpp_bindings LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
+include(FetchContent)
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
 # ---- pybind11 (vendored) ----
 
 if (NOT COMMAND pybind11_add_module)
-  add_subdirectory(
-    ${CMAKE_CURRENT_LIST_DIR}/../../../pybind11
-    ${CMAKE_CURRENT_BINARY_DIR}/pybind11_build
+  FetchContent_Declare(
+    pybind11
+    GIT_REPOSITORY github.com
+    GIT_TAG        v2.12.0 # Use a specific version tag for stability
   )
+  FetchContent_MakeAvailable(pybind11)
 endif()
 set(GSPAN_SOURCES
   dfs.cpp
