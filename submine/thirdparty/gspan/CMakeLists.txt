@@ -9,14 +9,24 @@ find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
 # ---- pybind11 (vendored) ----
 
-if (NOT COMMAND pybind11_add_module)
+include(FetchContent)
+
+# Try system / vcpkg / conda / installed pybind11 first
+find_package(pybind11 CONFIG QUIET)
+
+if (NOT pybind11_FOUND)
+  message(STATUS "pybind11 not found via find_package; fetching with FetchContent...")
+
   FetchContent_Declare(
     pybind11
-    GIT_REPOSITORY github.com
-    GIT_TAG        v2.12.0 # Use a specific version tag for stability
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG        v2.12.0
   )
   FetchContent_MakeAvailable(pybind11)
 endif()
+
+
+
 set(GSPAN_SOURCES
   dfs.cpp
   graph.cpp

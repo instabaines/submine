@@ -10,16 +10,23 @@ target_include_directories(alg PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set_target_properties(alg PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 include(FetchContent)
-# ---- pybind11 (reuse if provided by top-level; otherwise vendor locally) ----
-if (NOT COMMAND pybind11_add_module)
+
+# Try system / vcpkg / conda / installed pybind11 first
+find_package(pybind11 CONFIG QUIET)
+
+if (NOT pybind11_FOUND)
+  message(STATUS "pybind11 not found via find_package; fetching with FetchContent...")
+
   FetchContent_Declare(
     pybind11
-    GIT_REPOSITORY github.com
-    GIT_TAG        v2.12.0 # Use a specific version tag for stability
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG        v2.12.0
   )
   FetchContent_MakeAvailable(pybind11)
 endif()
+
 pybind11_add_module(sopagrami_cpp src/python_bindings.cpp)
+
 target_include_directories(sopagrami_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(sopagrami_cpp PRIVATE alg)
 set_target_properties(sopagrami_cpp PROPERTIES PREFIX "")
