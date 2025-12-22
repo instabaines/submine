@@ -9,11 +9,18 @@ add_library(alg STATIC src/alg.cpp)
 target_include_directories(alg PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set_target_properties(alg PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_subdirectory(
-  ${CMAKE_CURRENT_SOURCE_DIR}/../pybind11
-  ${CMAKE_CURRENT_BINARY_DIR}/pybind11_build
-)
 
+# add_subdirectory(
+#   ${CMAKE_CURRENT_SOURCE_DIR}/../pybind11
+#   ${CMAKE_CURRENT_BINARY_DIR}/pybind11_build
+# )
+# ---- pybind11 (reuse if provided by top-level; otherwise vendor locally) ----
+if (NOT COMMAND pybind11_add_module)
+  add_subdirectory(
+    ${CMAKE_CURRENT_LIST_DIR}/../../../pybind11
+    ${CMAKE_CURRENT_BINARY_DIR}/pybind11_build
+  )
+endif()
 pybind11_add_module(sopagrami_cpp src/python_bindings.cpp)
 target_include_directories(sopagrami_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(sopagrami_cpp PRIVATE alg)
