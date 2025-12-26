@@ -2,6 +2,7 @@ include README.md
 include pyproject.toml
 include requirements-dev.txt
 include pytest.ini
+include LICENSE
 
 recursive-include submine *.py
 recursive-include tests *.py *.md *.txt *.csv *.tsv *.json *.yaml *.yml *.gexf *.edgelist *.lg *.data *.gspan
