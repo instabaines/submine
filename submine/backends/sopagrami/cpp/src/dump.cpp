@@ -5,7 +5,6 @@
 #include <sstream>
 #include <functional>
 #include <climits>
-
 namespace fs = std::filesystem;
 
 namespace algo {

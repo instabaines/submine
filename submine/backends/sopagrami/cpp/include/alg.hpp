@@ -8,6 +8,7 @@
 #include <tuple>
 #include <limits>
 #include <bitset>
+#include <cstdint>
 namespace algo {
 
 
