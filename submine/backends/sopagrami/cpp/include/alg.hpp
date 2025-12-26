@@ -8,22 +8,28 @@
 #include <tuple>
 #include <limits>
 #include <bitset>
-
 namespace algo {
 
 
 
 // --- portable popcount64 ---
 #if defined(_MSC_VER)
-#include <intrin.h>
-static inline int popcount64(unsigned long long x) {
-    return (int)__popcnt64(x);
-}
+  #include <intrin.h>
+  static inline int popcount64(unsigned long long x) {
+  #if defined(_M_X64) || defined(_M_ARM64)
+      return (int)__popcnt64(x);
+  #else
+      // 32-bit: split into two 32-bit halves
+      return (int)(__popcnt((unsigned int)(x)) +
+                   __popcnt((unsigned int)(x >> 32)));
+  #endif
+  }
 #else
-static inline int popcount64(unsigned long long x) {
-    return __builtin_popcountll(x);
-}
+  static inline int popcount64(unsigned long long x) {
+      return __builtin_popcountll(x);
+  }
 #endif
+
 
 // ---------- DataGraph (your spec) ----------
 struct Edge { int u, v; std::string label; };
