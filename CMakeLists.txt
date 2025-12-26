@@ -3,7 +3,7 @@ message(STATUS "ROOT CMakeLists executing: installing Python package files")
 
 cmake_minimum_required(VERSION 3.15)
 project(submine LANGUAGES CXX)
-# add_subdirectory(submine/thirdparty/pybind11 EXCLUDE_FROM_ALL)
+# add_subdirectory(submine/backends/pybind11 EXCLUDE_FROM_ALL)
 
 # addpybind
 include(FetchContent)
@@ -14,8 +14,8 @@ FetchContent_Declare(pybind11
 FetchContent_MakeAvailable(pybind11)
 
 # Build the C++ extensions
-add_subdirectory(submine/thirdparty/sopagrami/cpp)
-add_subdirectory(submine/thirdparty/gspan)
+add_subdirectory(submine/backends/sopagrami/cpp)
+add_subdirectory(submine/backends/gspan)
 
 # Install the *Python* package directory into the wheel.
 # IMPORTANT: Source has NO trailing slash so the "submine" folder is preserved.
