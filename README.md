@@ -1,152 +1,170 @@
 # submine
 
-*submine* is a modular Python library for frequent subgraph mining that provides a unified, safe, and extensible interface over heterogeneous mining algorithms implemented in Python, C/C++, and Java.
+**submine** is a research‑grade Python library for frequent subgraph mining that provides a unified, safe, and extensible interface over heterogeneous mining algorithms implemented in Python, C++, and Java.
 
-The library is designed to support research-grade reproducibility and production-safe execution, while remaining lightweight and backend-agnostic.
+The goal of *submine* is to let users focus on **what** to mine rather than **how** each algorithm expects its input. Users select an algorithm and parameters; *submine* automatically validates inputs, converts graph formats, and executes the backend in a controlled and reproducible manner.
 
-## Core Design Principles
+---
 
-* Algorithm-agnostic API
-Users select an algorithm; submine handles format adaptation and execution.
+## Key Features
 
-* No redundant graph rewrites
-Input graphs are converted directly into the format required by the selected algorithm.
+* **Algorithm‑centric API**
+  You specify the mining algorithm and parameters; *submine* handles format adaptation and execution.
 
-* Strict input validation & safety
-Resource limits, parameter validation, and hardened subprocess execution are enforced by default.
+* **Direct format transcoding (no redundant rewrites)**
+  Input graphs are converted directly into the native format required by the selected algorithm.
 
-* Clean extensibility model
-New algorithms can be plugged in without modifying core logic.
+* **Multi‑format graph support**
+  Edge lists, gSpan datasets, single‑graph `.lg` files, and GEXF are supported out of the box.
 
-## Package Layout
-```
-submine/
-├── api.py                  # Public API entrypoint
-├── errors.py               # Structured exception hierarchy
-├── core/
-│   ├── graph.py            # Canonical graph representation
-│   └── result.py           # Mining result containers
-├── algorithms/
-│   ├── base.py             # Base miner abstraction
-│   ├── gspan.py            # gSpan wrapper / implementation
-│   ├── sopagrami.py        # SoPaGraMi backend wrapper
-│   └── ...
-├── io/
-│   ├── common.py           # Shared readers / writers
-│   ├── transcode.py        # Format detection & conversion
-│   ├── gspan.py            # gSpan I/O
-│   ├── sopagrami.py        # .lg I/O
-│   └── ...
-├── utils/
-│   └── checks.py           # Input validation & resource limits
-└── tests/
-    ├── unit/
-    └── functional/
-```
+* **Safe and reproducible execution**
+  Parameter validation, deterministic format detection, and hardened subprocess execution are enforced by default.
+
+* **Extensible design**
+  New algorithms can be added via a clean backend interface without modifying core logic.
+
+---
 
 ## Supported Algorithms
 
-| Algorithm | Graph Type         | Backend      | Notes                    |
-| --------- | ------------------ | ------------ | ------------------------ |
-| gSpan     | Multiple graphs    | Python / C++ | Frequent subgraph mining |
-| SoPaGraMi | Single large graph | C++          | Social pattern mining    |
+### gSpan (Frequent Subgraph Mining)
 
-Each algorithm declares:
+* **Graph type:** Multiple graphs (transactional dataset)
+* **Typical use case:** Discovering frequent substructures across many graphs
+* **Backend:**  C++
 
-* required input format,
-* parameter schema,
-* execution strategy (in-process vs subprocess).
+The gSpan backend in *submine* is a C++ implementation adapted and extended from the widely used **gBoost / gSpan reference implementations**, with additional input validation, format handling, and Python bindings for safe integration.
+
+### SoPaGraMi (Single‑Graph Pattern Mining)
+
+* **Graph type:** Single large graph
+* **Typical use case:** Social, biological, or information networks
+* **Backend:** C++
+
+SoPaGraMi is used for scalable subgraph mining on a single graph, where frequency is defined structurally rather than transactionally.
+
+---
 
 ## Supported Input Formats
 
-submine accepts graphs in multiple formats and converts them directly into the format required by the selected algorithm:
+*submine* automatically detects the input format and converts it to the format required by the chosen algorithm:
 
-* Edge list (.txt, .edgelist)
+* **Edge lists**: `.txt`, `.edgelist`
+* **gSpan datasets**: `.data`, `.data.x`, `.data.N`
+* **SoPaGraMi graphs**: `.lg`
+* **GEXF**: `.gexf`
 
-* gSpan datasets (.data, .data.x, .data.N)
+Format detection is deterministic and does not rely on user‑supplied flags.
 
-* SoPaGraMi .lg
-
-* GEXF (.gexf)
-
-* Format detection is automatic and deterministic.
+---
 
 ## Installation
-### Runtime installation
 
+### Standard installation
 
 ```bash
 pip install submine
-
 ```
-### Dev installation
+
+### Development installation
 
 ```bash
 pip install -e ".[dev]"
 ```
 
+---
+
 ## Basic Usage
+
+### gSpan example
 
 ```python
 from submine.api import mine_subgraphs
 
 results = mine_subgraphs(
-    data="graph.data",
+    data="graphs.data",
     algorithm="gspan",
     min_support=5
 )
-
 ```
 
-For SoPaGraMi:
+**Parameters**
+
+* `data` (str or path): Path to the input graph dataset
+* `algorithm` (str): Mining algorithm (`"gspan"`, `"sopagrami"`, …)
+* `min_support` (int): Minimum support threshold (algorithm‑specific semantics)
+
+---
+
+### SoPaGraMi example
+
 ```python
-results = mine_subgraphs("citeseer.lg", algorithm="sopagrami", 
-                    min_support=100,
-                    sorted_seeds=4,
-                    dump_images_csv=True, #if you want to dump the images
-                    dump_sample_embeddings=True, #if you want to dump the embeddings, not implemented yet
-                    out_dir= "." # /path/to/dir to save the images and embeddings default is ./sopagrami_result
-                    )
+results = mine_subgraphs(
+    data="citeseer.lg",
+    algorithm="sopagrami",
+    min_support=100,
+    sorted_seeds=4,
+    dump_images_csv=True,
+    dump_sample_embeddings=False,
+    out_dir="."
+)
 ```
 
-## TODO
-* Include more algorithms
-* Added more utils for cross-usage between other graph/network libraries
+**SoPaGraMi‑specific parameters**
 
-# Citation
+* `min_support` (int): Minimum frequency threshold
+* `sorted_seeds` (int): Seed sorting strategy (implementation‑specific)
+* `dump_images_csv` (bool): Whether to dump pattern images as CSV metadata
+* `dump_sample_embeddings` (bool): Whether to dump sample embeddings (experimental)
+* `out_dir` (str or path): Output directory for results (default: `./sopagrami_result`)
 
-If you use gspan kindly cite the paper
+---
 
-```
+## Design Philosophy
+
+* **No algorithm‑specific I/O burden on the user**
+  Users never manually convert graph formats.
+
+* **Minimal assumptions about graph structure**
+  Directed/undirected and labeled/unlabeled graphs are handled at the backend level.
+
+* **Research‑grade transparency**
+  Backends are explicitly documented and citable.
+
+---
+
+## Citation
+
+If you use **gSpan**, please cite:
+
+```bibtex
 @inproceedings{yan2002gspan,
   title={gspan: Graph-based substructure pattern mining},
   author={Yan, Xifeng and Han, Jiawei},
-  booktitle={2002 IEEE International Conference on Data Mining, 2002. Proceedings.},
+  booktitle={Proceedings of the IEEE International Conference on Data Mining},
   pages={721--724},
-  year={2002},
-  organization={IEEE}
+  year={2002}
 }
 ```
 
-if you use sopagrami, kindly cite the paper
+If you use **SoPaGraMi**, please cite:
 
-```
+```bibtex
 @article{nguyen2020fast,
   title={Fast and scalable algorithms for mining subgraphs in a single large graph},
   author={Nguyen, Lam BQ and Vo, Bay and Le, Ngoc-Thao and Snasel, Vaclav and Zelinka, Ivan},
   journal={Engineering Applications of Artificial Intelligence},
   volume={90},
   pages={103539},
-  year={2020},
-  publisher={Elsevier}
+  year={2020}
 }
 ```
 
-You can cite this implementation as well
+To cite this library:
 
-```
+```bibtex
 @misc{amure_submine,
-  title  = {submine: A Subgraph Mining Library},
+  title  = {submine: A Unified Subgraph Mining Library},
   author = {Amure, Ridwan},
   year   = {2025},
   url    = {https://github.com/instabaines/submine}

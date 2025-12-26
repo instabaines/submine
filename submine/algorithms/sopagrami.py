@@ -123,6 +123,7 @@ class SoPaGraMiMiner(SubgraphMiner):
                 edges=pat_edges,
                 node_labels=node_label_map,
                 edge_labels=edge_labels,
+                directed=self.directed
             )
 
             patterns.append(
@@ -197,7 +198,7 @@ class SoPaGraMiMiner(SubgraphMiner):
                 edge_labels[(u, v)] = label
 
             node_label_map = {i: lbl for i, lbl in enumerate(node_labels)}
-            pat_graph = Graph(nodes=nodes, edges=pat_edges, node_labels=node_label_map, edge_labels=edge_labels)
+            pat_graph = Graph(nodes=nodes, edges=pat_edges, node_labels=node_label_map, edge_labels=edge_labels,directed=self.directed)
 
             patterns.append(
                 SubgraphPattern(

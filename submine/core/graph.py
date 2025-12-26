@@ -48,13 +48,14 @@ class Graph:
         node_labels: Optional[Dict[Hashable, Any]] = None,
         edge_labels: Optional[Dict[Tuple[Hashable, Hashable], Any]] = None,
         edge_weights: Optional[Dict[Tuple[Hashable, Hashable], float]] = None,
+        directed: Optional[bool]=False
     ) -> None:
         self.nodes: List[Hashable] = list(nodes) if nodes is not None else []
         self.edges: List[Tuple[Hashable, Hashable]] = list(edges) if edges is not None else []
         self.node_labels: Optional[Dict[Hashable, Any]] = node_labels
         self.edge_labels: Optional[Dict[Tuple[Hashable, Hashable], Any]] = edge_labels
         self.edge_weights: Optional[Dict[Tuple[Hashable, Hashable], float]] = edge_weights
-
+        self.directed= directed
         # For incremental construction APIs.
         self._nodes: Dict[Hashable, Node] = {}
         self._adj: Dict[Hashable, List[Tuple[Hashable, Optional[Any], float]]] = {}

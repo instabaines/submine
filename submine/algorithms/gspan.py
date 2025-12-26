@@ -83,7 +83,7 @@ class GSpanMiner(SubgraphMiner):
 
         patterns = []
         for pid,rec in enumerate(gs):
-            pattern_graph = Graph(edges=rec["edges"],nodes=rec['nodes'])
+            pattern_graph = Graph(edges=rec["edges"],nodes=rec['nodes'],directed=self.directed)
             support = rec['support']
             patterns.append(
                 SubgraphPattern(
@@ -123,7 +123,7 @@ class GSpanMiner(SubgraphMiner):
 
         patterns = []
         for pid,rec in enumerate(gs):
-            pattern_graph = Graph(edges=rec["edges"],nodes=rec['nodes'])
+            pattern_graph = Graph(edges=rec["edges"],nodes=rec['nodes'],directed=self.directed)
             support = rec['support']
             patterns.append(
                 SubgraphPattern(
