@@ -1,0 +1,3 @@
+./data/citeseer.lg -linguist-detectable
+./data/graph-single.data -linguist-detectable
+./data/graph.data -linguist-detectable
