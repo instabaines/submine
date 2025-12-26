@@ -144,9 +144,11 @@ if you use sopagrami, kindly cite the paper
 
 You can cite this implementation as well
 
+```
 @misc{amure_submine,
   title  = {submine: A Subgraph Mining Library},
   author = {Amure, Ridwan},
   year   = {2025},
   url    = {https://github.com/instabaines/submine}
 }
+```
