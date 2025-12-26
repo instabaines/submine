@@ -30,3 +30,4 @@ wheels/
 # Cache
 .cache/
 *.cache
+submine1/*

@@ -1,6 +1,8 @@
 # submine/__init__.py
 from __future__ import annotations
 
+__version__ = "0.1.0"
+
 from .registry import available_algorithms
 from .errors import (
     SubmineError,

@@ -5,15 +5,40 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "submine"
 version = "0.1.0"
-description = "Unified subgraph mining library"
+description = "Modular subgraph mining library with unified API"
+readme = "README.md"
 requires-python = ">=3.9"
+dependencies = [
+  "networkx>=2.8",
+]
+authors = [
+  { name = "Ridwan Amure" }
+]
 license = { text = "MIT" }
-authors = [{ name = "Ridwan Amure" }]
-dependencies = ["numpy", "pandas", "networkx"]
+keywords = ["graph-mining", "subgraph-mining", "gspan", "frequent-subgraph-mining"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
 
-[tool.scikit-build]
-wheel.packages = ["submine"]
-wheel.install-dir = ""
-sdist.include = ["submine/**", "pyproject.toml", "CMakeLists.txt", "MANIFEST.in"]
+[project.optional-dependencies]
+dev = [
+  "pytest>=7",
+  "pytest-cov>=4",
+  "build>=1",
+  "twine>=5",
+  "ruff>=0.5",
+]
 
+[tool.setuptools]
+include-package-data = true
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["submine*"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
