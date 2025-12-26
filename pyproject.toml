@@ -23,6 +23,11 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 
+[project.urls]
+Homepage = "https://github.com/instabaines/submine"
+Repository = "https://github.com/instabaines/submine"
+Issues = "https://github.com/instabaines/submine/issues"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=7",

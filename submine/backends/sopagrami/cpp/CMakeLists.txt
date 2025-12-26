@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(alg STATIC src/alg.cpp)
+target_sources(alg PRIVATE
+    src/alg.cpp
+    src/dump.cpp
+)
+
 target_include_directories(alg PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set_target_properties(alg PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

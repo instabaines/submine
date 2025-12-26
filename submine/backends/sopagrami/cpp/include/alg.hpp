@@ -12,17 +12,18 @@
 namespace algo {
 
 
-    // --- portable popcount64 ---
-    #if defined(_MSC_VER)
-    #include <intrin.h>
-    static inline int popcount64(unsigned long long x) {
-        return (int)__popcnt64(x);
-    }
-    #else
-    static inline int popcount64(unsigned long long x) {
-        return __builtin_popcountll(x);
-    }
-    #endif
+
+// --- portable popcount64 ---
+#if defined(_MSC_VER)
+#include <intrin.h>
+static inline int popcount64(unsigned long long x) {
+    return (int)__popcnt64(x);
+}
+#else
+static inline int popcount64(unsigned long long x) {
+    return __builtin_popcountll(x);
+}
+#endif
 
 // ---------- DataGraph (your spec) ----------
 struct Edge { int u, v; std::string label; };
@@ -127,7 +128,16 @@ struct Found {
 struct Output {
     std::vector<Found> frequent_patterns;
 };
-
+void dump_patterns_to_dir(
+    const Output& out,
+    const std::string& dump_dir,
+    bool directed,
+    const DataGraph& G,
+    bool dump_images_csv,
+    int  max_images_per_vertex,
+    bool dump_sample_embeddings,
+    int  sample_limit
+);
 Output run_sopagrami(const DataGraph& G, const Params& p);
 
 } // namespace algo

@@ -100,11 +100,11 @@ results = mine_subgraphs(
 
 For SoPaGraMi:
 ```python
-results = mine_subgraphs(
-    data="graph.lg",
-    algorithm="sopagrami",
-    tau=3,
-    directed=0,
-    threads=4
-)
+results = mine_subgraphs("citeseer.lg", algorithm="sopagrami", 
+                    min_support=100,
+                    sorted_seeds=4,
+                    dump_images_csv=True, #if you want to dump the images
+                    dump_sample_embeddings=True, #if you want to dump the embeddings, not implemented yet
+                    out_dir= "." # /path/to/dir to save the images and embeddings default is ./sopagrami_result
+                    )
 ```
