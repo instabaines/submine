@@ -39,7 +39,7 @@ class Node:
 
 
 class Graph:
-    """Lightweight labeled (optionally weighted) undirected graph."""
+    """Lightweight labeled (optionally weighted) graph."""
 
     def __init__(
         self,

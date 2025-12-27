@@ -1,19 +1,13 @@
-# submine/algorithms/sopagrami.py
 from __future__ import annotations
-
 import tempfile
 import time
 from pathlib import Path
 from typing import Iterable, List, Optional
-
 from .base import SubgraphMiner, register
 from ..core.graph import Graph
 from ..core.result import MiningResult, SubgraphPattern
 from ..io.sopagrami import read_lg, write_lg
 from ..errors import ParameterValidationError
-
-
-
 
 @register
 class SoPaGraMiMiner(SubgraphMiner):

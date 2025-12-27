@@ -1,7 +1,6 @@
-# submine/__init__.py
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 from .registry import available_algorithms
 from .errors import (
@@ -16,10 +15,8 @@ from .errors import (
 
 # Import algorithms so they register themselves via @register
 # (you can add more as you implement them)
-from .algorithms import gspan  # noqa: F401
-# from .algorithms import grami  # noqa: F401
-from .algorithms import sopagrami  # noqa: F401
-# ...
+from .algorithms import gspan, sopagrami
+
 
 
 
