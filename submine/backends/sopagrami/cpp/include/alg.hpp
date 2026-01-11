@@ -76,7 +76,7 @@ struct DataGraph {
     std::vector<std::unordered_map<std::string, Bitset>> rev_el_bits;
         
     void load_from_lg(const std::string& path, bool as_directed);
-
+    void build_indices();
     bool has_edge(int u, int v, const std::string& label) const {
         auto it = adj_set[u].find(v);
         if(it==adj_set[u].end()) return false;
@@ -147,5 +147,6 @@ void dump_patterns_to_dir(
     int  sample_limit
 );
 Output run_sopagrami(const DataGraph& G, const Params& p);
+void prune_infrequent_graph_elements(DataGraph& G, int tau);
 
 } // namespace algo

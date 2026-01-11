@@ -29,6 +29,41 @@ static inline string encKey(const DataGraph::EdgeTypeKey& k){
     return k.lu + '\t' + k.lv + '\t' + k.el + '\t' + char('0' + k.dirflag);
 }
 
+void DataGraph::build_indices() {
+    int n = (int)vlabels.size();
+
+    // Reset all acceleration structures
+    label_bits.clear();
+    adj_el_bits.assign(n, {});
+    rev_el_bits.assign(n, {});
+    lab2nodes.clear();
+
+    // 1. Build Label Bits & lab2nodes
+    for(int i = 0; i < n; ++i) {
+        if(label_bits.find(vlabels[i]) == label_bits.end()) {
+            label_bits[vlabels[i]].init(n);
+        }
+        label_bits[vlabels[i]].set(i);
+        lab2nodes[vlabels[i]].insert(i);
+    }
+
+    // 2. Build Edge Connectivity Bits (Forward and Reverse)
+    for(int u = 0; u < n; ++u) {
+        // Iterate standard adjacency list
+        for(const auto& edge : adj[u]) {
+            int v = edge.first;
+            const std::string& el = edge.second;
+
+            // Forward: u -> v via el
+            if(adj_el_bits[u].find(el) == adj_el_bits[u].end()) adj_el_bits[u][el].init(n);
+            adj_el_bits[u][el].set(v);
+
+            // Reverse: v <- u via el
+            if(rev_el_bits[v].find(el) == rev_el_bits[v].end()) rev_el_bits[v][el].init(n);
+            rev_el_bits[v][el].set(u);
+        }
+    }
+}
 void DataGraph::load_from_lg(const std::string& path, bool as_directed){
     directed = as_directed;
     std::ifstream fin(path);
@@ -50,18 +85,14 @@ void DataGraph::load_from_lg(const std::string& path, bool as_directed){
         }else if(tag=="e"||tag=="E"){
             int u,v; std::string elab; ss>>u>>v;
             if(!(ss>>elab)) elab = "";
-            // ... (number normalization logic from your original code) ...
+            // ... (keep your number normalization logic here) ...
             if(!elab.empty()){
                 bool numlike=true;
                 for(unsigned char c : elab){
                     if(!(std::isdigit(c)||c=='.'||c=='-'||c=='+')){ numlike=false; break; }
                 }
                 if(numlike){
-                    try{
-                        double d = std::stod(elab);
-                        long long iv = (long long)d; 
-                        elab = std::to_string(iv);
-                    }catch(...){}
+                    try{ double d = std::stod(elab); long long iv = (long long)d; elab = std::to_string(iv); }catch(...){}
                 }
             }
             edges.push_back({u,v,elab});
@@ -75,55 +106,26 @@ void DataGraph::load_from_lg(const std::string& path, bool as_directed){
     vlabels.assign(n,"");
     for(int i=0;i<n;++i) if(vlab_map.count(i)) vlabels[i]=vlab_map[i];
 
+    // Clear old adj
     adj.assign(n,{}); rev.assign(n,{});
     adj_set.assign(n,{}); rev_set.assign(n,{});
-    
-    // Initialize Bitsets
-    adj_el_bits.assign(n, {});
-    rev_el_bits.assign(n, {});
-    label_bits.clear();
 
-    // Fill Label Bitsets
-    for(int i=0; i<n; ++i) {
-        if(label_bits.find(vlabels[i]) == label_bits.end()) {
-            label_bits[vlabels[i]].init(n);
-        }
-        label_bits[vlabels[i]].set(i);
-    }
-
+    // Populate standard adj
     for(const auto& e: edges){
-        // Normal Adjacency Lists
         adj[e.u].push_back({e.v,e.el});
         adj_set[e.u][e.v].insert(e.el);
         rev[e.v].push_back({e.u,e.el});
         rev_set[e.v][e.u].insert(e.el);
 
-        // Bitset Population (Forward)
-        if(adj_el_bits[e.u].find(e.el) == adj_el_bits[e.u].end()) adj_el_bits[e.u][e.el].init(n);
-        adj_el_bits[e.u][e.el].set(e.v);
-
-        // Bitset Population (Reverse)
-        if(rev_el_bits[e.v].find(e.el) == rev_el_bits[e.v].end()) rev_el_bits[e.v][e.el].init(n);
-        rev_el_bits[e.v][e.el].set(e.u);
-
         if(!directed){
-            // Store symmetric edges for undirected graphs
             adj[e.v].push_back({e.u,e.el});
             adj_set[e.v][e.u].insert(e.el);
             rev[e.u].push_back({e.v,e.el});
             rev_set[e.u][e.v].insert(e.el);
-
-            // Bitsets Symmetric
-            if(adj_el_bits[e.v].find(e.el) == adj_el_bits[e.v].end()) adj_el_bits[e.v][e.el].init(n);
-            adj_el_bits[e.v][e.el].set(e.u);
-
-            if(rev_el_bits[e.u].find(e.el) == rev_el_bits[e.u].end()) rev_el_bits[e.u][e.el].init(n);
-            rev_el_bits[e.u][e.el].set(e.v);
         }
     }
 
-    lab2nodes.clear();
-    for(int i=0;i<n;++i) lab2nodes[vlabels[i]].insert(i);
+    build_indices(); 
 }
 vector<DataGraph::EdgeTypeStat> DataGraph::edge_type_counts_insertion_order() const {
     vector<EdgeTypeStat> stats;
@@ -880,9 +882,103 @@ static void SUBGRAPHEXTENSION(const DataGraph& G, int tau,
     }
 }
 
+// [alg.cpp]
+
+void prune_infrequent_graph_elements(DataGraph& G, int tau) {
+    if (tau <= 1) return; // Nothing to prune
+
+    // 1. Count Frequencies
+    std::unordered_map<std::string, int> node_label_counts;
+    std::unordered_map<std::string, int> edge_label_counts;
+    
+    for(const auto& lab : G.vlabels) node_label_counts[lab]++;
+    
+    // Count edge labels (careful with undirected double counting)
+    for(int u = 0; u < (int)G.adj.size(); ++u) {
+        for(const auto& edge : G.adj[u]) {
+            // For undirected, G.adj has both u->v and v->u. 
+            // We can just count everything and check threshold*2 if strictly undirected, 
+            // or just count as seen. 
+            // Standard approach: Count occurrences in the adjacency list.
+            // If undirected, each edge appears twice, so threshold logic should align.
+            // However, GraMi typically filters based on "number of edges having this label".
+            if (!G.directed && u > edge.first) continue; // Count undirected once
+            edge_label_counts[edge.second]++;
+        }
+    }
+
+    // 2. Identify Valid Labels
+    std::unordered_set<std::string> valid_node_labels;
+    std::unordered_set<std::string> valid_edge_labels;
+    for(const auto& kv : node_label_counts) if(kv.second >= tau) valid_node_labels.insert(kv.first);
+    for(const auto& kv : edge_label_counts) if(kv.second >= tau) valid_edge_labels.insert(kv.first);
+
+    // 3. Map Old IDs to New IDs
+    std::vector<int> old_to_new(G.vlabels.size(), -1);
+    std::vector<std::string> new_vlabels;
+    int new_n = 0;
+
+    for(int i = 0; i < (int)G.vlabels.size(); ++i) {
+        if(valid_node_labels.count(G.vlabels[i])) {
+            old_to_new[i] = new_n++;
+            new_vlabels.push_back(G.vlabels[i]);
+        }
+    }
+
+    // If no nodes removed, check if edges need removal. If neither, return.
+    if(new_n == (int)G.vlabels.size() && valid_edge_labels.size() == edge_label_counts.size()) {
+        return; 
+    }
+
+    // 4. Construct New Graph Structure
+    std::vector<std::vector<std::pair<int, std::string>>> new_adj(new_n);
+    std::vector<std::vector<std::pair<int, std::string>>> new_rev(new_n);
+    std::vector<std::unordered_map<int, std::unordered_set<std::string>>> new_adj_set(new_n);
+    std::vector<std::unordered_map<int, std::unordered_set<std::string>>> new_rev_set(new_n);
+
+    for(int u = 0; u < (int)G.adj.size(); ++u) {
+        if(old_to_new[u] == -1) continue;
+        int new_u = old_to_new[u];
+
+        for(const auto& edge : G.adj[u]) {
+            int v = edge.first;
+            const std::string& el = edge.second;
+            
+            // Keep edge only if target is valid AND edge label is valid
+            if(old_to_new[v] != -1 && valid_edge_labels.count(el)) {
+                int new_v = old_to_new[v];
+                new_adj[new_u].push_back({new_v, el});
+                new_adj_set[new_u][new_v].insert(el);
+            }
+        }
+        
+        // Do the same for rev
+        for(const auto& edge : G.rev[u]) {
+             int v = edge.first;
+             const std::string& el = edge.second;
+             if(old_to_new[v] != -1 && valid_edge_labels.count(el)) {
+                 int new_v = old_to_new[v];
+                 new_rev[new_u].push_back({new_v, el});
+                 new_rev_set[new_u][new_v].insert(el);
+             }
+        }
+    }
+
+    // 5. Swap and Rebuild Indices
+    G.vlabels = std::move(new_vlabels);
+    G.adj = std::move(new_adj);
+    G.rev = std::move(new_rev);
+    G.adj_set = std::move(new_adj_set);
+    G.rev_set = std::move(new_rev_set);
+
+    // IMPORTANT: Call build_indices to regenerate bitsets on the smaller graph
+    G.build_indices(); 
+}
 // ============================ Driver ==================================
 
-Output run_sopagrami(const DataGraph& G, const Params& p){
+Output run_sopagrami(const DataGraph& G_in, const Params& p){
+    DataGraph G = G_in;
+    prune_infrequent_graph_elements(G, p.tau);
     // 1) frequent 1-edge seeds by true MNI
     auto seeds = compute_frequent_edge_seeds(G, p.tau);
     if (seeds.empty()){
