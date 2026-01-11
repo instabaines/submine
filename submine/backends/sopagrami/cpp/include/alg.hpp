@@ -32,7 +32,7 @@ namespace algo {
 #endif
 
 
-// ---------- DataGraph (your spec) ----------
+// ---------- DataGraph ----------
 struct Edge { int u, v; std::string label; };
 struct Bitset {
     std::vector<uint64_t> w;
@@ -73,6 +73,7 @@ struct DataGraph {
     // Bitset indices (speedup for undirected and directed)
     std::unordered_map<std::string, Bitset> label_bits;                 // label -> nodes
     std::vector<std::unordered_map<std::string, Bitset>> adj_el_bits;   // per u: el -> bitset(neighbors via el)
+    std::vector<std::unordered_map<std::string, Bitset>> rev_el_bits;
         
     void load_from_lg(const std::string& path, bool as_directed);
 
