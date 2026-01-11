@@ -74,6 +74,10 @@ struct DataGraph {
     std::unordered_map<std::string, Bitset> label_bits;                 // label -> nodes
     std::vector<std::unordered_map<std::string, Bitset>> adj_el_bits;   // per u: el -> bitset(neighbors via el)
     std::vector<std::unordered_map<std::string, Bitset>> rev_el_bits;
+    std::unordered_map<std::string, int> label_to_id;
+    std::vector<std::string> id_to_label;
+    std::vector<std::vector<Bitset>> adj_bits; 
+    std::vector<std::vector<Bitset>> rev_bits;
         
     void load_from_lg(const std::string& path, bool as_directed);
     void build_indices();

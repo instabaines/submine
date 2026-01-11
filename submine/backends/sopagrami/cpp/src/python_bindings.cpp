@@ -34,7 +34,7 @@ py::list run_on_lg_file(
     Output out = run_sopagrami(G, p);
 
     // Optional side-effect: dump pattern files to directory
-    if (!out_dir.empty()) {
+    if (!out_dir.empty() && !out.frequent_patterns.empty() && (dump_images_csv || dump_sample_embeddings)) {
         dump_patterns_to_dir(
             out,
             out_dir,
