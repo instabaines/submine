@@ -11,6 +11,7 @@ using namespace algo;
 py::list run_on_lg_file(
     const std::string& path,
     int  tau,
+    int max_edges,
     bool directed,
     bool sorted_seeds,
     int  num_threads,
@@ -30,6 +31,7 @@ py::list run_on_lg_file(
     p.sorted_seeds         = sorted_seeds;
     p.num_threads          = num_threads;
     p.compute_full_support = compute_full_support;
+    p.max_edges           = max_edges;
 
     Output out = run_sopagrami(G, p);
 
@@ -80,6 +82,7 @@ PYBIND11_MODULE(sopagrami_cpp, m) {
         &run_on_lg_file,
         py::arg("path"),
         py::arg("tau")                  = 2,
+        py::arg("max_edges"),
         py::arg("directed")             = false,
         py::arg("sorted_seeds")         = true,
         py::arg("num_threads")          = 0,

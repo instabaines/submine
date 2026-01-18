@@ -113,6 +113,7 @@ results = mine_subgraphs(
 **SoPaGraMi‑specific parameters**
 
 - `min_support` (int): Minimum frequency threshold
+- `max_edges` (int): maximum pattern size
 - `sorted_seeds` (int): Seed sorting strategy (implementation‑specific)
 - `dump_images_csv` (bool): Whether to dump pattern images as CSV metadata
 - `dump_sample_embeddings` (bool): Whether to dump sample embeddings (experimental)
@@ -120,6 +121,35 @@ results = mine_subgraphs(
 
 ---
 
+### Optimization (Specific to SoPaGrami): Maximum Edge Limit (`max_edges`)
+
+#### The Problem: Combinatorial Explosion
+Even on small graphs (e.g., < 4,000 edges), subgraph mining can hang indefinitely if the graph contains **dense clusters** or **hub nodes** (nodes with high degrees of identical labels).
+
+In these dense regions, the number of valid subgraphs grows **exponentially** with the number of edges. 
+* A pattern with 5 edges might have 100 embeddings.
+* A pattern with 20 edges might have $10^9$ (billions) of embeddings.
+
+Without a limit, the algorithm attempts to enumerate every single one of these "super-patterns," causing the system to stall (mining for hours/days without progress).
+
+## The Solution: `max_edges`
+We have introduced a `max_edges` parameter to the configuration. This acts as a **hard depth limit** for the search tree.
+
+* **Mechanism:** During the candidate generation phase (`SUBGRAPHEXTENSION`), if a pattern's edge count reaches `max_edges`, the algorithm **stops expanding** that branch.
+* **Default Value:** 10 (Conservative start).
+
+## Implications & Trade-offs
+
+| Implication | Description |
+| :--- | :--- |
+| **Performance** | **Drastic Speedup.** Prevents the algorithm from entering "infinite" search spaces in dense cliques. |
+| **Completeness** | **Partial Loss.** You will not discover frequent patterns that strictly require > `max_edges` to be defined. You will only find their sub-components (fragments of size `max_edges`). |
+| **Relevance** | **High.** In most domain applications (bioinformatics, social networks), distinct functional motifs rarely exceed 10-15 edges. Larger patterns are often just "hairball" noise. |
+
+## Tuning Guide
+* **Start Small:** Set `max_edges = 5`. The code should finish in seconds.
+* **Scale Up:** Increment to 6, 7, 8... until the runtime becomes unacceptable.
+* **Disable:** Set `max_edges = -1` (or a very large number) to disable the limit, but be warned of potential hangs on dense graphs.
 ## Design Philosophy
 
 - **No algorithm‑specific I/O burden on the user**
