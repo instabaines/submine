@@ -71,7 +71,7 @@ void DataGraph::build_indices() {
         for(const auto& e : adj[u]) {
             int v = e.first;
             int l_id = label_to_id[e.second]; // Safe lookup now
-            
+
             adj_bits[l_id][u].set(v);
             rev_bits[l_id][v].set(u);
         }
@@ -133,7 +133,7 @@ void DataGraph::load_from_lg(const std::string& path, bool as_directed){
             rev_set[e.u][e.v].insert(e.el);
         }
     }
-    build_indices(); 
+    build_indices();
 }
 vector<DataGraph::EdgeTypeStat> DataGraph::edge_type_counts_insertion_order() const {
     vector<EdgeTypeStat> stats;
@@ -387,7 +387,7 @@ static unordered_map<string,int> build_seed_mni_map(const vector<SeedInfo>& seed
 
 static inline bool check_edge_fast(const DataGraph& G, int dir, int label_id, int u, int v) {
     if (label_id < 0) return false; // Label doesn't exist in graph
-    
+
     if (G.directed && dir == 1) {
         return G.adj_bits[label_id][u].test(v); // O(1) Array Access
     } else {
@@ -397,7 +397,7 @@ static inline bool check_edge_fast(const DataGraph& G, int dir, int label_id, in
 
 static inline bool check_edge_bitset(const DataGraph& G,
                                      const Pattern::PEdge& e,
-                                     int u_graph, int v_graph) 
+                                     int u_graph, int v_graph)
 {
     // If pattern edge is directed u->v (dir=1)
     if (G.directed && e.dir == 1) {
@@ -406,7 +406,7 @@ static inline bool check_edge_bitset(const DataGraph& G,
         auto it = G.adj_el_bits[u_graph].find(e.el);
         if (it == G.adj_el_bits[u_graph].end()) return false;
         return it->second.test(v_graph);
-    } 
+    }
     // If pattern edge is undirected (dir=0) OR graph is undirected
     else {
         // We checked symmetric population in load_from_lg, so adj_el_bits contains both.
@@ -423,57 +423,98 @@ static inline bool consistent_edge_map(const DataGraph& G,
     if (e.dir == 1) {
         if (e.a == va && e.b == vb) return G.has_edge(ga, gb, e.el);
         if (e.a == vb && e.b == va) return G.has_edge(gb, ga, e.el);
-        return true; 
+        return true;
     } else {
         // Safe check for undirected or symmetric edges
         return G.has_edge(ga, gb, e.el) || G.has_edge(gb, ga, e.el);
     }
 }
 // Local AC (neighbor-existence) with scans (safe for directed + undirected)
+
+// [alg.cpp] REPLACE your existing filter_domains... with this:
+
 static void filter_domains_by_local_constraints(const DataGraph& G,
                                                 const Pattern& P,
-                                                vector<vector<int>>& dom)
+                                                vector<vector<int>>& dom_vecs)
 {
+    const int n = (int)G.vlabels.size();
     const int k = (int)P.vlab.size();
+
+    // 1. Convert vector domains to Bitsets
+    vector<Bitset> dom(k);
+    for(int i=0; i<k; ++i){
+        dom[i].init(n);
+        for(int u : dom_vecs[i]) dom[i].set(u);
+    }
+
     bool changed = true;
     while(changed) {
         changed = false;
-        for (int v = 0; v < k; ++v){
-            if (dom[v].empty()) continue;
-            vector<int> keep; keep.reserve(dom[v].size());
 
-            for (int gi : dom[v]){
-                bool ok_all = true;
-                for (const auto& e : P.pedges){
-                    if (e.a != v && e.b != v) continue;
-                    const int nb = (e.a==v? e.b : e.a);
-                    const string& needLab = P.vlab[nb];
-                    const string& el = e.el;
+        for(const auto& e : P.pedges) {
+            int u = e.a;
+            int v = e.b;
+            // Look up Integer ID
+            auto it_lab = G.label_to_id.find(e.el);
+            int label_id = (it_lab != G.label_to_id.end()) ? it_lab->second : -1;
+            if (label_id == -1) { // Impossible edge
+                 dom[u].init(n); dom[v].init(n); goto convert_back;
+            }
 
-                    // Check if gi has ANY neighbor with label 'el' and node-label 'needLab'
-                    // Optimization: We could check if that neighbor is also in dom[nb]
-                    bool ok_edge = false;
-                    const auto& neighbors = (G.directed && e.dir==1 && e.b==v) ? G.rev[gi] : G.adj[gi];
-                    
-                    for (auto [x, lbl] : neighbors) {
-                        if (lbl == el && G.vlabels[x] == needLab){ 
-                            ok_edge = true; break; 
-                        }
-                    }
-                    if (!ok_edge){ ok_all = false; break; }
+            // Filter U based on V (Forward)
+            for (int cand_u = 0; cand_u < n; ++cand_u) {
+                if (!dom[u].test(cand_u)) continue;
+
+                bool keep = false;
+                // Use Fast Bitset Intersection: valid = (Neighbors[cand_u] AND Domain[v])
+                if (check_edge_fast(G, e.dir, label_id, cand_u, 0)) {
+                    // Hack: check_edge_fast usually checks specific node.
+                    // For AC-3, we need ANY neighbor. We use the raw bitset:
+                    if (G.adj_bits[label_id][cand_u].any_and(dom[v])) keep = true;
+                } else {
+                    // Check reverse if graph is directed and edge is incoming?
+                     // (Simplified: Just use the raw bitset access for AC-3)
+                     if (G.directed && e.dir == 1) {
+                         if (G.adj_bits[label_id][cand_u].any_and(dom[v])) keep = true;
+                     } else {
+                         // Undirected/Symmetric
+                         if (G.adj_bits[label_id][cand_u].any_and(dom[v])) keep = true;
+                     }
                 }
-                if (ok_all) keep.push_back(gi);
+
+                // Precise check logic for AC-3:
+                // We need to know if 'cand_u' has a neighbor in 'dom[v]' with label 'label_id'
+                if(G.adj_bits[label_id][cand_u].any_and(dom[v])) keep = true;
+
+                if (!keep) { dom[u].reset(cand_u); changed = true; }
             }
-            if (keep.size() < dom[v].size()) {
-                dom[v].swap(keep);
-                changed = true;
+            if (dom[u].count() == 0) goto convert_back;
+
+            // Filter V based on U (Reverse)
+            for (int cand_v = 0; cand_v < n; ++cand_v) {
+                if (!dom[v].test(cand_v)) continue;
+
+                bool keep = false;
+                // If directed u->v, we check INCOMING edges of v (rev_bits)
+                if (G.directed && e.dir == 1) {
+                    if (G.rev_bits[label_id][cand_v].any_and(dom[u])) keep = true;
+                } else {
+                    if (G.adj_bits[label_id][cand_v].any_and(dom[u])) keep = true;
+                }
+
+                if (!keep) { dom[v].reset(cand_v); changed = true; }
             }
+            if (dom[v].count() == 0) goto convert_back;
+        }
+    }
+convert_back:
+    for(int i=0; i<k; ++i){
+        dom_vecs[i].clear();
+        for(int u=0; u<n; ++u){
+            if(dom[i].test(u)) dom_vecs[i].push_back(u);
         }
     }
 }
-
-
-
 // Check existence of at least ONE solution (for MNI)
 static bool exists_solution_with(const DataGraph& G, const Pattern& P,
                                  int fixVar, int fixNode,
@@ -551,13 +592,13 @@ static bool exists_solution_with(const DataGraph& G, const Pattern& P,
             if (!ok) continue;
 
             // Assign and Recurse
-            assign[v] = gi; 
+            assign[v] = gi;
             used[gi] = 1;
-            
+
             if (self(self)) return true; // Found one! Return immediately.
-            
+
             // Backtrack
-            used[gi] = 0; 
+            used[gi] = 0;
             assign[v] = -1;
         }
         return false;
@@ -566,43 +607,68 @@ static bool exists_solution_with(const DataGraph& G, const Pattern& P,
     // Start recursion
     return dfs(dfs);
 }
+// [alg.cpp] REPLACE your existing count_total_embeddings with this:
+
 static long long count_total_embeddings(const DataGraph& G, const Pattern& P,
                                         const vector<vector<int>>& domains)
 {
     const int k = (int)P.vlab.size();
     const int n = (int)G.vlabels.size();
+
+    // 1. OPTIMIZATION: Convert Pattern Edge Labels to Integers ONCE
+    vector<int> edge_ids;
+    edge_ids.reserve(P.pedges.size());
+    for(const auto& e : P.pedges) {
+        auto it = G.label_to_id.find(e.el);
+        if(it == G.label_to_id.end()) return 0; // Label not in graph
+        edge_ids.push_back(it->second);
+    }
+
     vector<int> assign(k, -1);
     vector<char> used(n, 0);
     long long total = 0;
 
-    function<void(int)> dfs = [&](int v_idx){
+    // 2. Recursive DFS using Integer IDs
+    auto dfs = [&](auto&& self, int v_idx) -> void {
         if (v_idx == k) {
             total++;
             return;
         }
-        // Simple static ordering for full count prevents overhead of MRV re-calculation
-        int v = v_idx; 
+
+        // Simple ordering 0..k-1
+        int v = v_idx;
 
         for (int gi : domains[v]){
             if (used[gi]) continue;
-            
+
             bool ok = true;
-            for (const auto& e : P.pedges){
-                // Check edges connected to already assigned nodes
-                if (e.a == v && e.b < v) { // Neighbor e.b already assigned
-                     if (!consistent_edge_map(G,e,e.a,e.b,gi,assign[e.b])) { ok=false; break; }
-                } else if (e.b == v && e.a < v) { // Neighbor e.a already assigned
-                     if (!consistent_edge_map(G,e,e.a,e.b,assign[e.a],gi)) { ok=false; break; }
+            // Iterate all pattern edges
+            for (size_t i = 0; i < P.pedges.size(); ++i){
+                const auto& e = P.pedges[i];
+
+                // Only check constraints against neighbors that are ALREADY assigned
+                // Since we fill variables in order (0, 1, 2...), we check neighbors < v
+                if (e.a == v && e.b < v) {
+                    // e.b is assigned; check edge u->v
+                     if (!check_edge_fast(G, e.dir, edge_ids[i], gi, assign[e.b])) { ok=false; break; }
+                } else if (e.b == v && e.a < v) {
+                    // e.a is assigned; check edge v->u
+                     if (!check_edge_fast(G, e.dir, edge_ids[i], assign[e.a], gi)) { ok=false; break; }
                 }
             }
             if (!ok) continue;
 
-            assign[v] = gi; used[gi] = 1;
-            dfs(v + 1);
-            used[gi] = 0; assign[v] = -1;
+            assign[v] = gi;
+            used[gi] = 1;
+
+            self(self, v + 1);
+
+            used[gi] = 0;
+            assign[v] = -1;
         }
     };
-    dfs(0);
+
+    dfs(dfs, 0);
     return total;
 }
 // Exact MNI: per-variable existence, with local AC
@@ -617,7 +683,7 @@ static int compute_MNI_support_exact(const DataGraph& G, const Pattern& P, int t
         if ((int)dom[i].size() < tau) return 0;
     }
     filter_domains_by_local_constraints(G, P, dom);
-    
+
     int support = numeric_limits<int>::max();
     for (int v=0; v<k; ++v){
         if ((int)dom[v].size() < tau) return 0;
@@ -627,7 +693,7 @@ static int compute_MNI_support_exact(const DataGraph& G, const Pattern& P, int t
                 ++count_v;
                 // Optimization: If we only care about frequency, we could break here.
                 // But for accurate MNI reporting, we keep counting.
-                // if (count_v >= tau) break; 
+                // if (count_v >= tau) break;
             }
         }
         support = min(support, count_v);
@@ -839,7 +905,7 @@ static void SUBGRAPHEXTENSION(const DataGraph& G, int tau,
 
     // 2. Exact Calculation: If requested, compute full support
     long long reported_support = mni;
-    
+
     if (compute_full_support) {
         // Re-generate domains for the exact counter
         const int k = (int)S.vlab.size();
@@ -849,12 +915,12 @@ static void SUBGRAPHEXTENSION(const DataGraph& G, int tau,
              if(it != G.lab2nodes.end()) dom[i].assign(it->second.begin(), it->second.end());
         }
         filter_domains_by_local_constraints(G, S, dom);
-        
+
         reported_support = count_total_embeddings(G, S, dom);
-        
+
         // Optional: Filter if Exact Support < Tau (SuGraMi strictness)
         // If you want to keep patterns that satisfy MNI even if exact support is low, remove this line.
-        if (reported_support < tau) return; 
+        if (reported_support < tau) return;
     }
 
     out.push_back({S, reported_support});
@@ -879,15 +945,15 @@ void prune_infrequent_graph_elements(DataGraph& G, int tau) {
     // 1. Count Frequencies
     std::unordered_map<std::string, int> node_label_counts;
     std::unordered_map<std::string, int> edge_label_counts;
-    
+
     for(const auto& lab : G.vlabels) node_label_counts[lab]++;
-    
+
     // Count edge labels (careful with undirected double counting)
     for(int u = 0; u < (int)G.adj.size(); ++u) {
         for(const auto& edge : G.adj[u]) {
-            // For undirected, G.adj has both u->v and v->u. 
-            // We can just count everything and check threshold*2 if strictly undirected, 
-            // or just count as seen. 
+            // For undirected, G.adj has both u->v and v->u.
+            // We can just count everything and check threshold*2 if strictly undirected,
+            // or just count as seen.
             // Standard approach: Count occurrences in the adjacency list.
             // If undirected, each edge appears twice, so threshold logic should align.
             // However, GraMi typically filters based on "number of edges having this label".
@@ -916,7 +982,7 @@ void prune_infrequent_graph_elements(DataGraph& G, int tau) {
 
     // If no nodes removed, check if edges need removal. If neither, return.
     if(new_n == (int)G.vlabels.size() && valid_edge_labels.size() == edge_label_counts.size()) {
-        return; 
+        return;
     }
 
     // 4. Construct New Graph Structure
@@ -932,7 +998,7 @@ void prune_infrequent_graph_elements(DataGraph& G, int tau) {
         for(const auto& edge : G.adj[u]) {
             int v = edge.first;
             const std::string& el = edge.second;
-            
+
             // Keep edge only if target is valid AND edge label is valid
             if(old_to_new[v] != -1 && valid_edge_labels.count(el)) {
                 int new_v = old_to_new[v];
@@ -940,7 +1006,7 @@ void prune_infrequent_graph_elements(DataGraph& G, int tau) {
                 new_adj_set[new_u][new_v].insert(el);
             }
         }
-        
+
         // Do the same for rev
         for(const auto& edge : G.rev[u]) {
              int v = edge.first;
@@ -961,7 +1027,7 @@ void prune_infrequent_graph_elements(DataGraph& G, int tau) {
     G.rev_set = std::move(new_rev_set);
 
     // IMPORTANT: Call build_indices to regenerate bitsets on the smaller graph
-    G.build_indices(); 
+    G.build_indices();
 }
 // ============================ Driver ==================================
 
@@ -1002,7 +1068,7 @@ Output run_sopagrami(const DataGraph& G_in, const Params& p){
             Pattern seed;
             seed.vlab = {seeds[i].key.lu, seeds[i].key.lv};
             seed.pedges.push_back({0,1,seeds[i].key.el,seeds[i].key.dirflag});
-            SUBGRAPHEXTENSION(G, p.tau, seeds, seed_mni, seed, 
+            SUBGRAPHEXTENSION(G, p.tau, seeds, seed_mni, seed,
                               local_emitted[tid], locals[tid], p.compute_full_support);
         }
     }
@@ -1017,12 +1083,12 @@ Output run_sopagrami(const DataGraph& G_in, const Params& p){
 #endif
 
     Output out;
-    unordered_set<string> global_emitted; 
+    unordered_set<string> global_emitted;
     global_emitted.reserve(65536);
-    
+
     for (int t=0; t<T; ++t){
         for (auto &f : locals[t]){
-            if (global_emitted.insert(canonical_key(f.pat)).second) 
+            if (global_emitted.insert(canonical_key(f.pat)).second)
                 out.frequent_patterns.push_back(std::move(f));
         }
     }
