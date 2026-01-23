@@ -115,6 +115,7 @@ struct Params {
     bool sorted_seeds = true;    // SoGraMi ordering
     int num_threads = 0;         // 0 => use hardware_concurrency
     bool compute_full_support = true; // if false, use MNI only
+    int max_edges = 10; // Default limit on max edges in patterns to control runtime/memory
 };
 
 struct Pattern {

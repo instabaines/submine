@@ -51,6 +51,7 @@ class SoPaGraMiMiner(SubgraphMiner):
     def mine(
         self,
         graphs: Iterable[Graph],
+        max_edges: int,
         min_support: Optional[int] = None,
         out_dir:str=None,dump_images_csv:bool=False,
                            max_images_per_vertex:int=50,dump_sample_embeddings:bool=False
@@ -78,7 +79,7 @@ class SoPaGraMiMiner(SubgraphMiner):
             write_lg(G, lg_path, directed=self.directed)
 
             # 2) call C++ binding
-            runtime, patterns_raw = self._run_backend_on_lg(lg_path, tau=tau,out_dir=out_dir,dump_images_csv=dump_images_csv,
+            runtime, patterns_raw = self._run_backend_on_lg(lg_path, max_edges=max_edges, tau=tau,out_dir=out_dir,dump_images_csv=dump_images_csv,
                            max_images_per_vertex=max_images_per_vertex,dump_sample_embeddings=dump_sample_embeddings)
 
         # 3) Convert to our SubgraphPattern representation
@@ -151,7 +152,7 @@ class SoPaGraMiMiner(SubgraphMiner):
             metadata={"backend": "sopagrami_cpp"},
         )
 
-    def mine_native(self, lg_path: str | Path, min_support: Optional[int] = None, out_dir:str=None,dump_images_csv:bool=False,
+    def mine_native(self, lg_path: str | Path, max_edges: int, min_support: Optional[int] = None, out_dir:str=None,dump_images_csv:bool=False,
                            max_images_per_vertex:int=50,dump_sample_embeddings:bool=False) -> MiningResult:
         """Run SoPaGraMi directly on a user-supplied ``.lg`` file.
 
@@ -165,7 +166,7 @@ class SoPaGraMiMiner(SubgraphMiner):
             raise ValueError(f"Expected a .lg file for SoPaGraMi; got: {lg_path}")
 
         tau = int(min_support if min_support is not None else self.tau)
-        runtime, patterns_raw = self._run_backend_on_lg(lg_path, tau=tau,out_dir=out_dir,dump_images_csv=dump_images_csv,
+        runtime, patterns_raw = self._run_backend_on_lg(lg_path, tau=tau, max_edges=max_edges, out_dir=out_dir,dump_images_csv=dump_images_csv,
                            max_images_per_vertex=max_images_per_vertex,dump_sample_embeddings=dump_sample_embeddings)
 
         # Convert patterns (same as in mine())
@@ -220,7 +221,7 @@ class SoPaGraMiMiner(SubgraphMiner):
             metadata={"backend": "sopagrami_cpp", "input_lg": str(lg_path)},
         )
 
-    def _run_backend_on_lg(self, lg_path: Path, tau: int,out_dir:str=None,dump_images_csv:bool=False,
+    def _run_backend_on_lg(self, lg_path: Path,tau: int,max_edges:int = 100,out_dir:str=None,dump_images_csv:bool=False,
                            max_images_per_vertex:int=50,dump_sample_embeddings:bool=False):
         from . import sopagrami_cpp
         t0 = time.time()
@@ -230,6 +231,7 @@ class SoPaGraMiMiner(SubgraphMiner):
         patterns_raw = sopagrami_cpp.run_on_lg_file(
             str(lg_path),
             tau=tau,
+            max_edges = max_edges,
             directed=self.directed,
             sorted_seeds=self.sorted_seeds,
             num_threads=self.num_threads,
@@ -238,8 +240,5 @@ class SoPaGraMiMiner(SubgraphMiner):
             out_dir = out_dir,
             max_images_per_vertex = max_images_per_vertex,
             dump_sample_embeddings=dump_sample_embeddings
-
-
-
         )
         return time.time() - t0, patterns_raw

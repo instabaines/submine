@@ -156,7 +156,7 @@ static void write_pattern_images_csv(const algo::Pattern& P,
 }
 
 
-// --- NEW: sample embeddings CSV (one row per embedding, columns are pattern vertex order) ---
+// sample embeddings CSV (one row per embedding, columns are pattern vertex order) ---
 static void write_sample_embeddings_csv(const algo::Pattern& P,
                                         const std::vector<std::vector<int>>& emb,
                                         const std::string& path_csv)
