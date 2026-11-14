@@ -176,29 +176,38 @@ def _build_label_maps(graphs: List[Graph]):
     next_node_label = 2
     next_edge_label = 2
 
+    unlabeled_node = False
+    unlabeled_edge = False
+
     for G in graphs:
         # Node labels
-        if G.node_labels is not None:
-            for nid in G.nodes:
-                lbl = G.node_labels.get(nid, None)
-                if lbl is None:
-                    continue
-                if lbl not in node_label_map:
-                    node_label_map[lbl] = next_node_label
-                    next_node_label += 1
+        for nid in G.nodes:
+            lbl = G.node_labels.get(nid, None) if G.node_labels is not None else None
+            if lbl is None:
+                unlabeled_node = True
+                continue
+            if lbl not in node_label_map:
+                node_label_map[lbl] = next_node_label
+                next_node_label += 1
 
         # Edge labels
-        if G.edge_labels is not None:
-            for e, lbl in G.edge_labels.items():
-                if lbl not in edge_label_map:
-                    edge_label_map[lbl] = next_edge_label
-                    next_edge_label += 1
+        labels = G.edge_labels or {}
+        for e in G.edges:
+            u, v = e[0], e[1]
+            if labels.get(G._edge_key(u, v)) is None and (len(e) < 3 or e[2] is None):
+                unlabeled_edge = True
+        for e, lbl in labels.items():
+            if lbl not in edge_label_map:
+                edge_label_map[lbl] = next_edge_label
+                next_edge_label += 1
 
-    # Fallback: if there are unlabeled nodes/edges, give them a default label
-    if not node_label_map:
-        node_label_map["__default_node__"] = 2
-    if not edge_label_map:
-        edge_label_map["__default_edge__"] = 2
+    # Fallback label for unlabeled nodes/edges. Registered whenever any node/edge
+    # lacks a label, not only when nothing is labeled, so that partially labeled
+    # graphs can still be written.
+    if unlabeled_node or not node_label_map:
+        node_label_map["__default_node__"] = next_node_label
+    if unlabeled_edge or not edge_label_map:
+        edge_label_map["__default_edge__"] = next_edge_label
 
     return node_label_map, edge_label_map
 
@@ -256,7 +265,9 @@ def write_gspan_dataset(graphs: Iterable[Graph], path: Path) -> None:
                 v_new = id_map[v]
 
                 if G.edge_labels is not None:
-                    raw_elbl = G.edge_labels.get((u, v), raw_elbl)
+                    # Labels are stored under the graph's canonical key; for undirected
+                    # graphs that is not necessarily (u, v) as listed in G.edges.
+                    raw_elbl = G.edge_labels.get(G._edge_key(u, v), raw_elbl)
 
                 label_key = raw_elbl if raw_elbl in edge_label_map else "__default_edge__"
                 elbl_int = edge_label_map[label_key]
