@@ -56,7 +56,7 @@ class SubgraphMiner(ABC):
                         "set weight_strategy='ignore' to drop weights explicitly."
                     )
                 # ignore: drop weights
-                g.edge_weights = None
+                g.edge_weights = {}
             yield g
 
     @abstractmethod

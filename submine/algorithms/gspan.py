@@ -11,44 +11,10 @@ import time
 
 from .base import SubgraphMiner, register
 from ..core.graph import Graph
-from ..core.result import MiningResult, SubgraphPattern
-from ..io.gspan import write_gspan_dataset, convert_gspan_graph, _build_label_maps
-from typing import Iterable
+from ..core.result import MiningResult
+from ..io.gspan import write_gspan_dataset, _build_label_maps
+from .pattern_utils import build_gspan_patterns
 
-
-_DEFAULT_LABELS = ("__default_node__", "__default_edge__")
-
-
-def _pattern_graph(rec: dict, directed: bool, node_inv: Optional[dict] = None,
-                   edge_inv: Optional[dict] = None) -> Graph:
-    """Build a pattern Graph from one backend record, keeping its labels.
-
-    The backend reports integer labels (as written to the gSpan file). ``node_inv`` /
-    ``edge_inv`` map them back to the caller's original labels; without them (native
-    gSpan input) the integer labels are kept. Undirected patterns list each edge in
-    both directions; it is added once.
-    """
-    def back(inv, lbl):
-        if inv is None:
-            return lbl
-        orig = inv.get(lbl, lbl)
-        return None if orig in _DEFAULT_LABELS else orig
-
-    nlabels = rec.get("node_labels") or []
-    elabels = rec.get("edge_labels") or []
-    g = Graph(directed=directed)
-    for i, nid in enumerate(rec["nodes"]):
-        lbl = back(node_inv, nlabels[i]) if i < len(nlabels) else None
-        g.add_node(nid, lbl)
-    seen = set()
-    for i, (u, v) in enumerate(rec["edges"]):
-        key = (u, v) if directed else (min(u, v), max(u, v))
-        if key in seen:
-            continue
-        seen.add(key)
-        lbl = back(edge_inv, elabels[i]) if i < len(elabels) else None
-        g.add_edge(u, v, label=lbl)
-    return g
 
 @register
 class GSpanMiner(SubgraphMiner):
@@ -106,7 +72,7 @@ class GSpanMiner(SubgraphMiner):
 
     def mine(self, graphs: List[Graph], min_support: Optional[int] = None, **kwargs) -> MiningResult:
         graphs = list(self._handle_weights(graphs))
-        support = int(min_support if min_support is not None else self.min_support)
+        requested_support = int(min_support if min_support is not None else self.min_support)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -114,37 +80,20 @@ class GSpanMiner(SubgraphMiner):
 
             # write graphs in gspan format
             write_gspan_dataset(graphs, db_path)
-            runtime, gs = self._run_on_dataset(db_path, support)
+            runtime, gs = self._run_on_dataset(db_path, requested_support)
 
         # invert the label maps used by write_gspan_dataset, to report original labels
         node_map, edge_map = _build_label_maps(graphs)
         node_inv = {v: k for k, v in node_map.items()}
         edge_inv = {v: k for k, v in edge_map.items()}
 
-        patterns = []
-        for pid,rec in enumerate(gs):
-            pattern_graph = _pattern_graph(rec, self.directed, node_inv, edge_inv)
-            support = rec['support']
-            patterns.append(
-                SubgraphPattern(
-                    pid=pid,
-                    graph=pattern_graph,
-                    support=support,
-                    frequency=None,
-                    occurrences=[],  # can fill later if track embeddings
-                    attributes={
-                        "num_vertices": pattern_graph.number_of_nodes(),
-                        "graph_ids": rec["graph_ids"],
-                    },
-                )
-            )
-    
+        patterns = build_gspan_patterns(gs, self.directed, node_inv, edge_inv)
 
         return MiningResult(
             patterns=patterns,
             algorithm=self.name,
             params=dict(
-                min_support=support,
+                min_support=requested_support,
                 directed=self.directed,
                 min_vertices=self.min_vertices,
                 max_vertices=self.max_vertices,
@@ -161,23 +110,7 @@ class GSpanMiner(SubgraphMiner):
         support = int(min_support)
         runtime, gs = self._run_on_dataset(db_path, support)
 
-        patterns = []
-        for pid,rec in enumerate(gs):
-            pattern_graph = _pattern_graph(rec, self.directed)
-            support = rec['support']
-            patterns.append(
-                SubgraphPattern(
-                    pid=pid,
-                    graph=pattern_graph,
-                    support=support,
-                    frequency=None,
-                    occurrences=[],  # can fill later if track embeddings
-                    attributes={
-                        "num_vertices": pattern_graph.number_of_nodes(),
-                        "graph_ids": rec["graph_ids"],
-                    },
-                )
-            )
+        patterns = build_gspan_patterns(gs, self.directed)
 
         return MiningResult(
             patterns=patterns,
