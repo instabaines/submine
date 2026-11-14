@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__ = "0.1.2"
+__version__ = "0.1.5"
 
 from .registry import available_algorithms
 from .errors import (
