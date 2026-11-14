@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 from .base import SubgraphMiner, register
 from ..core.graph import Graph
-from ..core.result import MiningResult, SubgraphPattern
-from ..io.sopagrami import read_lg, write_lg
+from ..core.result import MiningResult
+from ..io.sopagrami import write_lg
 from ..errors import ParameterValidationError
+from .pattern_utils import build_sopagrami_patterns
 
 @register
 class SoPaGraMiMiner(SubgraphMiner):
@@ -82,59 +83,7 @@ class SoPaGraMiMiner(SubgraphMiner):
             runtime, patterns_raw = self._run_backend_on_lg(lg_path, max_edges=max_edges, tau=tau,out_dir=out_dir,dump_images_csv=dump_images_csv,
                            max_images_per_vertex=max_images_per_vertex,dump_sample_embeddings=dump_sample_embeddings)
 
-        # 3) Convert to our SubgraphPattern representation
-        patterns: List[SubgraphPattern] = []
-        for pid, pd in enumerate(patterns_raw):
-            node_labels = list(pd["node_labels"])
-            edges_raw = list(pd["edges"])
-            support = int(pd["full_support"])
-            key = pd["key"]
-
-            # SoPaGraMi pattern node IDs are 0..k-1
-            k = len(node_labels)
-            nodes = list(range(k))
-
-            # Build our Graph for the pattern
-            pat_edges = []
-            edge_labels = {}
-            for (a, b, el, dirflag) in edges_raw:
-                a = int(a)
-                b = int(b)
-                # Our Graph is undirected; we store the undirected edge,
-                # and put direction info into the label if needed.
-                u, v = (a, b) if a <= b else (b, a)
-                pat_edges.append((u, v))
-
-                label = el
-                if self.directed and dirflag == 1:
-                    # encode direction in the label for now
-                    label = f"{el}->"
-                edge_labels[(u, v)] = label
-
-            node_label_map = {i: lbl for i, lbl in enumerate(node_labels)}
-
-            pat_graph = Graph(
-                nodes=nodes,
-                edges=pat_edges,
-                node_labels=node_label_map,
-                edge_labels=edge_labels,
-                directed=self.directed
-            )
-
-            patterns.append(
-                SubgraphPattern(
-                    pid=pid,
-                    graph=pat_graph,
-                    support=support,
-                    frequency=None,
-                    occurrences=[],
-                    attributes={
-                        "key": key,
-                        "k": k,
-                        "num_edges": len(pat_edges),
-                    },
-                )
-            )
+        patterns = build_sopagrami_patterns(patterns_raw, directed=self.directed)
 
         return MiningResult(
             patterns=patterns,
@@ -169,42 +118,7 @@ class SoPaGraMiMiner(SubgraphMiner):
         runtime, patterns_raw = self._run_backend_on_lg(lg_path, tau=tau, max_edges=max_edges, out_dir=out_dir,dump_images_csv=dump_images_csv,
                            max_images_per_vertex=max_images_per_vertex,dump_sample_embeddings=dump_sample_embeddings)
 
-        # Convert patterns (same as in mine())
-        patterns: List[SubgraphPattern] = []
-        for pid, pd in enumerate(patterns_raw):
-            node_labels = list(pd["node_labels"])
-            edges_raw = list(pd["edges"])
-            support = int(pd["full_support"])
-            key = pd["key"]
-
-            k = len(node_labels)
-            nodes = list(range(k))
-
-            pat_edges = []
-            edge_labels = {}
-            for (a, b, el, dirflag) in edges_raw:
-                a = int(a)
-                b = int(b)
-                u, v = (a, b) if a <= b else (b, a)
-                pat_edges.append((u, v))
-                label = el
-                if self.directed and dirflag == 1:
-                    label = f"{el}->"
-                edge_labels[(u, v)] = label
-
-            node_label_map = {i: lbl for i, lbl in enumerate(node_labels)}
-            pat_graph = Graph(nodes=nodes, edges=pat_edges, node_labels=node_label_map, edge_labels=edge_labels,directed=self.directed)
-
-            patterns.append(
-                SubgraphPattern(
-                    pid=pid,
-                    graph=pat_graph,
-                    support=support,
-                    frequency=None,
-                    occurrences=[],
-                    attributes={"key": key, "k": k, "num_edges": len(pat_edges)},
-                )
-            )
+        patterns = build_sopagrami_patterns(patterns_raw, directed=self.directed)
 
         return MiningResult(
             patterns=patterns,
