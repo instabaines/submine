@@ -25,6 +25,11 @@ jobs:
         run: python -m pip install --upgrade pip cibuildwheel==2.* 
 
       - name: Build wheels
+        env:
+          # cibuildwheel 2.x still selects PyPy by default. Its current
+          # manylinux i686 image no longer contains the PyPy 3.9 interpreter,
+          # so provisioning pp39-manylinux_i686 fails before our build starts.
+          CIBW_SKIP: "pp*"
         run: python -m cibuildwheel --output-dir dist
 
       - uses: actions/upload-artifact@v4
